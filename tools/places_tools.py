@@ -5,16 +5,12 @@ import math
 
 from langchain_core.tools import tool
 
-# Dictionary of predefined addresses accessed through environment variables
-ADDRESSES = {
-    'home_address':os.getenv('GOOGLE_API_HOME_ADDRESS'),
-    'olivia_address':os.getenv('GOOGLE_API_OLIVIA_ADDRESS'),
-    'chantal_address':os.getenv('GOOGLE_API_CHANTAL_ADDRESS')
-}
+from tools.utils import ADDRESSES
+
+
 # Google Maps API key from environment variable
 maps_key = os.getenv('GOOGLE_MAPS_KEY')
 
-@tool
 def get_address_place_id(address_string: str) -> str:
     """
     Get Google Places ID for a given address using Geocoding API.
@@ -30,13 +26,12 @@ def get_address_place_id(address_string: str) -> str:
         params={'address':address_string, 
         'key':maps_key}
         )
-    
+
     if response.status_code == 200:
         return response.json()['results'][0]['place_id']
     else:
         return "Error: could not get response."
 
-@tool
 def get_address_long_lat(address_string: str) -> dict:
     """
     Get latitude and longitude coordinates for a given address using Geocoding API.
@@ -53,8 +48,18 @@ def get_address_long_lat(address_string: str) -> dict:
         'key':maps_key}
         )
     
+    print(response.json())
+
     if response.status_code == 200:
-        return response.json()['results'][0]['navigation_points'][0]['location']
+        response_json = response.json()['results'][0]
+
+        if 'navigation_points' in response_json:
+            return response_json['navigation_points'][0]['location']
+        else:
+            return {
+                'latitude':response_json['geometry']['location']['lat'],
+                'longitude':response_json['geometry']['location']['lng']
+            }
     else:
         return {'Error':"Error: could not get response."}
 
@@ -78,8 +83,8 @@ def get_route(destination_address: str, origin_address: str) -> dict:
         origin_address = ADDRESSES[origin_address]
 
     # Get Place IDs for both addresses
-    origin_id = get_address_place_id(origin_address, maps_key)
-    destination_id = get_address_place_id(destination_address, maps_key)
+    origin_id = get_address_place_id(origin_address)
+    destination_id = get_address_place_id(destination_address)
     
     url = 'https://routes.googleapis.com/directions/v2:computeRoutes'
 
@@ -109,9 +114,9 @@ def get_route(destination_address: str, origin_address: str) -> dict:
         "languageCode": "en-CA",
         "units": "METRIC"
     }
-
     # Make API request and process response
     response = requests.post(url, headers=headers, data=json.dumps(payload))
+
     if response.status_code == 200:
         response_json = response.json()
         return {'route_steps':response_json['routes'][0]['legs'][0]['steps'], 
