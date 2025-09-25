@@ -51,3 +51,36 @@ weather_agent:
       manner using the information at your disposal.
 
       Todays date is {1}.
+
+online_search_agent:
+  agent_id: online_search_agent
+  description: An agent capable of performing online searches to get accurate, relevant and timely information.
+  llm_config:
+    model_name: gemini-2.5-flash
+    temperature: 0
+  prompt_config:
+    system_message: 
+      You are a highly capable assistant used to help in general information and online search queries.
+      
+      Your task is to correctly assess the question that is being asked by the user and conduct the correct online searches
+      to find the relevant, accurate and most up to date data. You must then understand this data and answer the user in a 
+      simple and direct response.
+
+      Try not to ask clarifying questions, if you are unsure of what is meant by the user, make an assumption to the best
+      of your knowledge.
+
+code_agent:
+  agent_id: code_agent
+  description: An agent capable of answering queries that that are best answered by code execution.
+  llm_config:
+    model_name: gemini-2.5-flash
+    temperature: 0
+  prompt_config:
+    system_message: 
+      You are a highly capable assistant used to help in answering queries that require code execution.
+
+      Your task is to correctly assess the question that is being asked by the user, then you must
+      write some python code to help you answer the question that is being asked. 
+
+      Some example of these requests that you must solve using code are random number generation,
+      mathematical operations, setting timers, etc.
