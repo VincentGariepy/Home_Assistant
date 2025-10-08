@@ -117,6 +117,7 @@ def get_route(destination_address: str, origin_address: str) -> dict:
     # Make API request and process response
     response = requests.post(url, headers=headers, data=json.dumps(payload))
 
+    #TODO: Fix problem with time without traffic
     if response.status_code == 200:
         response_json = response.json()
         return {'route_steps':response_json['routes'][0]['legs'][0]['steps'], 

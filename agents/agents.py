@@ -14,7 +14,7 @@ from langchain_core.messages import (
 )
 from langgraph.func import entrypoint, task
 from langchain_core.tools import Tool
-from langchain_google_community import GoogleSearchAPIWrapper
+from langchain_google_community import GoogleSearchAPIWrapper, GoogleSearchResults
 
 from tools.utils import ADDRESSES
 from tools.places_tools import get_route
@@ -112,16 +112,11 @@ def _init_online_search_agent():
     llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
                                 model=online_search_agent_config['llm_config']['model_name'],
                                 temperature=online_search_agent_config['llm_config']['temperature'])
-    
-    search = GoogleSearchAPIWrapper()
-    search.google_api_key = maps_api_key
-    search.google_cse_id = google_cse_id
 
-    grounding_tool = Tool(
-        name="google_search",
-        description="Search Google for recent results.",
-        func=search.run,
-    )
+    search = GoogleSearchAPIWrapper(google_api_key=maps_api_key, 
+                                    google_cse_id=google_cse_id)
+
+    grounding_tool = GoogleSearchResults(api_wrapper=search)
     
     tools = [grounding_tool]
 
@@ -129,18 +124,18 @@ def _init_online_search_agent():
     llm_with_tools = llm.bind_tools(tools)
 
 
-    system_prompt = online_search_agent_config['prompt_config']['system_message']
+    system_prompt = online_search_agent_config['prompt_config']['system_message'].format(
+                                    date.today().strftime('%Y-%m-%d'))
 
     return AgentInitData(tools_by_name=tools_by_name, 
                          llm_with_tools=llm_with_tools,
                          system_prompt=system_prompt)
 
-#TODO: Create requriements.txt
 @entrypoint()
 def online_search_agent(messages: list[BaseMessage]):
-    weather_agent_data = _init_online_search_agent()
+    online_search_agent_data = _init_online_search_agent()
 
-    return _tool_calling_agent(weather_agent_data, messages)
+    return _tool_calling_agent(online_search_agent_data, messages)
 
 def _init_code_agent():
     online_search_agent_config = config['code_agent']
@@ -149,13 +144,13 @@ def _init_code_agent():
                                 temperature=online_search_agent_config['llm_config']['temperature'])
     
     code_execution_tool = types.Tool(code_execution=types.ToolCodeExecution)
+    tools_by_name = {'code_execution_tool':code_execution_tool}
 
-    tools_by_name = {'code_execution_tool': code_execution_tool}
-    llm_with_tools = llm.bind_tools(tools_by_name.values())
+    llm_with_tools = llm.bind_tools(list(tools_by_name.values()))
 
 
     system_prompt = online_search_agent_config['prompt_config']['system_message']
-
+    print(system_prompt)
     return AgentInitData(tools_by_name=tools_by_name, 
                          llm_with_tools=llm_with_tools,
                          system_prompt=system_prompt)
