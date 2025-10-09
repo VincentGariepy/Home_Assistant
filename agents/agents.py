@@ -14,6 +14,7 @@ from langchain_core.messages import (
 )
 from langgraph.func import entrypoint, task
 from langchain_core.tools import Tool
+from langchain_experimental.utilities import PythonREPL
 from langchain_google_community import GoogleSearchAPIWrapper, GoogleSearchResults
 
 from tools.utils import ADDRESSES
@@ -31,6 +32,9 @@ with open('agents/agents_config.yml', 'r') as file:
 @task
 def _call_llm(messages: list[BaseMessage], agent_data: AgentInitData):
     """LLM decides whether to call a tool or not"""
+    if type(messages) == str:
+        messages = [HumanMessage(content=messages)]
+
     return agent_data.llm_with_tools.invoke(
         [SystemMessage(content=agent_data.system_prompt)] + messages
     )
@@ -41,7 +45,9 @@ def _call_tool(tool_call: ToolCall, agent_data: AgentInitData):
     tool = agent_data.tools_by_name[tool_call["name"]]
     return tool.invoke(tool_call)
 
-def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage]):
+def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] | str):
+    if type(messages) == str:
+        messages = [HumanMessage(content=messages)]
     llm_response = _call_llm(messages, agent_data).result()
 
     while True:
@@ -76,7 +82,7 @@ def _init_route_agent():
                          system_prompt=system_prompt)
 
 @entrypoint()
-def route_agent(messages: list[BaseMessage]):
+def route_agent(messages: list[BaseMessage] | str):
     route_agent_data = _init_route_agent()
 
     return _tool_calling_agent(route_agent_data, messages)
@@ -102,7 +108,7 @@ def _init_weather_agent():
                          system_prompt=system_prompt)
 
 @entrypoint()
-def weather_agent(messages: list[BaseMessage]):
+def weather_agent(messages: list[BaseMessage] | str):
     weather_agent_data = _init_weather_agent()
 
     return _tool_calling_agent(weather_agent_data, messages)
@@ -132,7 +138,7 @@ def _init_online_search_agent():
                          system_prompt=system_prompt)
 
 @entrypoint()
-def online_search_agent(messages: list[BaseMessage]):
+def online_search_agent(messages: list[BaseMessage] | str):
     online_search_agent_data = _init_online_search_agent()
 
     return _tool_calling_agent(online_search_agent_data, messages)
@@ -143,20 +149,80 @@ def _init_code_agent():
                                 model=online_search_agent_config['llm_config']['model_name'],
                                 temperature=online_search_agent_config['llm_config']['temperature'])
     
-    code_execution_tool = types.Tool(code_execution=types.ToolCodeExecution)
-    tools_by_name = {'code_execution_tool':code_execution_tool}
+    python_repl = PythonREPL()
+    # You can create the tool to pass to an agent
+    repl_tool = Tool(
+        name="python_repl",
+        description="A Python shell. Use this to execute python commands. Input should be a valid python command. If you want to see the output of a value, you should print it out with `print(...)`.",
+        func=python_repl.run,
+    )
+    tools = [repl_tool]
 
-    llm_with_tools = llm.bind_tools(list(tools_by_name.values()))
+    tools_by_name = {tool.name: tool for tool in tools}
+    llm_with_tools = llm.bind_tools(tools)
 
 
     system_prompt = online_search_agent_config['prompt_config']['system_message']
-    print(system_prompt)
+
     return AgentInitData(tools_by_name=tools_by_name, 
                          llm_with_tools=llm_with_tools,
                          system_prompt=system_prompt)
 
 @entrypoint()
-def code_agent(messages: list[BaseMessage]):
+def code_agent(messages: list[BaseMessage] | str):
     code_agent = _init_code_agent()
 
     return _tool_calling_agent(code_agent, messages)
+
+def _create_agent_tools():
+    route_agent_tool = Tool(
+        name="route_agent_tool",
+        description="A tool for getting driving route information. Takes a prompt as input.",
+        func=route_agent.invoke,
+    )
+
+    weather_agent_tool = Tool(
+        name="weather_agent_tool",
+        description="A tool for getting weather information. Takes a prompt as input.",
+        func=weather_agent.invoke,
+    )
+
+    online_search_agent_tool = Tool(
+        name="online_search_agent_tool",
+        description="A tool for getting online search information. Takes a prompt as input.",
+        func=online_search_agent.invoke,
+    )
+
+    code_agent_tool = Tool(
+        name="code_agent_tool",
+        description="A tool for getting code execution information. Takes a prompt as input.",
+        func=code_agent.invoke,
+    )
+
+    return [route_agent_tool, weather_agent_tool, online_search_agent_tool, code_agent_tool]
+
+def _init_main_agent():
+    main_agent_config = config['main_agent']
+    llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
+                                model=main_agent_config['llm_config']['model_name'],
+                                temperature=main_agent_config['llm_config']['temperature'])
+    
+    tools = _create_agent_tools()
+
+    tools_by_name = {tool.name: tool for tool in tools}
+    llm_with_tools = llm.bind_tools(tools)
+
+
+    system_prompt = main_agent_config['prompt_config']['system_message'].format(
+                                    tools_by_name.keys(),
+                                    date.today().strftime('%Y-%m-%d'))
+
+    return AgentInitData(tools_by_name=tools_by_name, 
+                         llm_with_tools=llm_with_tools,
+                         system_prompt=system_prompt)
+
+@entrypoint()
+def main_agent(messages: list[BaseMessage] | str):
+    main_agent = _init_main_agent()
+
+    return _tool_calling_agent(main_agent, messages)
