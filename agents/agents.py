@@ -48,7 +48,10 @@ def _call_tool(tool_call: ToolCall, agent_data: AgentInitData):
 def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] | str):
     if type(messages) == str:
         messages = [HumanMessage(content=messages)]
+    print(_call_llm(messages, agent_data).result())
     llm_response = _call_llm(messages, agent_data).result()
+    print('messages:', messages)
+    print('agent_data:', agent_data.system_prompt)
 
     while True:
         if not llm_response.tool_calls:
@@ -59,6 +62,7 @@ def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] |
             _call_tool(tool_call, agent_data) for tool_call in llm_response.tool_calls
         ]
         tool_results = [fut.result() for fut in tool_result_futures]
+        print('tool_results:', tool_results)
         messages = add_messages(messages, [llm_response, *tool_results])
         llm_response = _call_llm(messages, agent_data).result()
 
@@ -174,7 +178,7 @@ def code_agent(messages: list[BaseMessage] | str):
 
     return _tool_calling_agent(code_agent, messages)
 
-def _create_agent_tools():
+def _create_main_agent_tools():
     route_agent_tool = Tool(
         name="route_agent_tool",
         description="A tool for getting driving route information. Takes a prompt as input.",
@@ -207,7 +211,7 @@ def _init_main_agent():
                                 model=main_agent_config['llm_config']['model_name'],
                                 temperature=main_agent_config['llm_config']['temperature'])
     
-    tools = _create_agent_tools()
+    tools = _create_main_agent_tools()
 
     tools_by_name = {tool.name: tool for tool in tools}
     llm_with_tools = llm.bind_tools(tools)

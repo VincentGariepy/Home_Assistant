@@ -19,10 +19,10 @@ class HomeAssistant():
         #TODO: Make async to add message that it still waiting, with timeout
         self.add_human_message(message)
         response = main_agent.invoke(self.conversation_history)
+        
         self.add_ai_message(response[-1].content)
 
         self.update_end_memory()
-
         return response[-1].content
 
     def update_end_memory(self):

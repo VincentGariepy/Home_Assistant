@@ -47,8 +47,6 @@ def get_address_long_lat(address_string: str) -> dict:
         params={'address':address_string, 
         'key':maps_key}
         )
-    
-    print(response.json())
 
     if response.status_code == 200:
         response_json = response.json()['results'][0]

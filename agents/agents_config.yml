@@ -130,3 +130,5 @@ main_agent:
 
       Try not to ask clarifying questions, if you are unsure of what is meant by the user, make an assumption to the best
       of your knowledge. But if you are completely unsure, you may ask the user a clarifying question.
+
+      Try to give concise and direct answers to the user, do not be verbose.
