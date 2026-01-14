@@ -12,7 +12,7 @@ class HomeAssistant():
         self.memory_timeframe = memory_timeframe
         self.end_memory = datetime.today() + timedelta(minutes=memory_timeframe)
 
-    def get_answer(self, message: str):
+    async def get_answer(self, message: str):
         if datetime.today() > self.end_memory:
             self.clear_conversation_history()
 
@@ -23,7 +23,7 @@ class HomeAssistant():
         self.add_ai_message(response[-1].content)
 
         self.update_end_memory()
-        return response[-1].content
+        return response[-1].content[0]['text']
 
     def update_end_memory(self):
         self.end_memory = datetime.today() + timedelta(minutes=self.memory_timeframe)

@@ -2,7 +2,7 @@ route_agent:
   agent_id: route_agent
   description: An agent capable of performing Google maps queries to get the route to certain places.
   llm_config:
-    model_name: gemini-2.5-flash
+    model_name: gemini-3-flash-preview
     temperature: 0
   prompt_config:
     system_message: You are a highly capable assistant used to help in navigation. 
@@ -27,7 +27,7 @@ weather_agent:
   agent_id: weather_agent
   description: An agent capable of performing weather queries to get the current, daily, and hourly weather.
   llm_config:
-    model_name: gemini-2.5-flash
+    model_name: gemini-3-flash-preview
     temperature: 0
   prompt_config:
     system_message: 
@@ -56,7 +56,7 @@ online_search_agent:
   agent_id: online_search_agent
   description: An agent capable of performing online searches to get accurate, relevant and timely information.
   llm_config:
-    model_name: gemini-2.5-flash
+    model_name: gemini-3-flash-preview
     temperature: 0
   prompt_config:
     system_message: 
@@ -65,6 +65,10 @@ online_search_agent:
       Your task is to correctly assess the question that is being asked by the user and conduct the correct online searches
       to find the relevant, accurate and most up to date data. You must then understand this data and answer the user in a 
       simple and direct response.
+
+      You have access to an online search tool, your query should be a simplified version of the users query, you should not
+      include any extraneous information, just the core of the question being asked. The best way to search online for information
+      is to use keywords, so try to distill the users query down to the most important keywords.
 
       For reference, todays date is {0}.
 
@@ -75,7 +79,7 @@ code_agent:
   agent_id: code_agent
   description: An agent capable of answering queries that that are best answered by code execution.
   llm_config:
-    model_name: gemini-2.5-flash
+    model_name: gemini-3-flash-preview
     temperature: 0
   prompt_config:
     system_message: 
@@ -113,7 +117,7 @@ main_agent:
   agent_id: main_agent
   description: An agent capable of understanding the users query and deciding which specialized agent to use to answer the query.
   llm_config:
-    model_name: gemini-2.5-flash
+    model_name: gemini-3-flash-preview
     temperature: 0
   prompt_config:
     system_message: 
@@ -132,3 +136,5 @@ main_agent:
       of your knowledge. But if you are completely unsure, you may ask the user a clarifying question.
 
       Try to give concise and direct answers to the user, do not be verbose.
+
+      Reply with the tool call.

@@ -48,10 +48,7 @@ def _call_tool(tool_call: ToolCall, agent_data: AgentInitData):
 def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] | str):
     if type(messages) == str:
         messages = [HumanMessage(content=messages)]
-    print(_call_llm(messages, agent_data).result())
     llm_response = _call_llm(messages, agent_data).result()
-    print('messages:', messages)
-    print('agent_data:', agent_data.system_prompt)
 
     while True:
         if not llm_response.tool_calls:
@@ -62,7 +59,6 @@ def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] |
             _call_tool(tool_call, agent_data) for tool_call in llm_response.tool_calls
         ]
         tool_results = [fut.result() for fut in tool_result_futures]
-        print('tool_results:', tool_results)
         messages = add_messages(messages, [llm_response, *tool_results])
         llm_response = _call_llm(messages, agent_data).result()
 
@@ -218,7 +214,7 @@ def _init_main_agent():
 
 
     system_prompt = main_agent_config['prompt_config']['system_message'].format(
-                                    tools_by_name.keys(),
+                                    list(tools_by_name.keys()),
                                     date.today().strftime('%Y-%m-%d'))
 
     return AgentInitData(tools_by_name=tools_by_name, 
