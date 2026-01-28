@@ -1,4 +1,3 @@
-
 import os
 
 # Dictionary of predefined addresses accessed through environment variables
