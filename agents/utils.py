@@ -2,7 +2,7 @@ import asyncio
 import inspect
 from functools import wraps
 
-from agents.audio_agent import convert_text_to_speech
+from audio_functions.genai_audio_utils import convert_text_to_speech
 
 def async_resilient(retries=3, timeout=5):
     def decorator(func):

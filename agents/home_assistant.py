@@ -6,7 +6,7 @@ from langchain_core.messages import (
     AIMessage,
 )
 
-from agents.audio_agent import convert_text_to_speech, convert_speech_to_text
+from audio_functions.genai_audio_utils import convert_text_to_speech, convert_speech_to_text
 from agents.agents import main_agent, quirky_agent
 from agents.utils import async_resilient
 
