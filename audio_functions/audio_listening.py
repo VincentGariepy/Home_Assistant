@@ -107,3 +107,4 @@ def get_user_request():
         stream.stop_stream()
         stream.close()
         pa.terminate()
+        

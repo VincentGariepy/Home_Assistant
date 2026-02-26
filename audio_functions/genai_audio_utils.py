@@ -130,12 +130,13 @@ async def convert_text_to_speech(content: str, tone: str):
     stream.close()
     p.terminate()
 
-def convert_speech_to_text(file_path: str) -> str:
+def convert_speech_to_text(file_path: str = None, audio_bytes: bytes = None) -> str:
     agent_config = CONFIG['speech_to_text_agent']['llm_config']
     client = genai.Client(api_key=AI_API_KEY)
 
-    with open(file_path, "rb") as audio_file:
-        audio_bytes = audio_file.read()
+    if file_path is not None:
+        with open(file_path, "rb") as audio_file:
+            audio_bytes = audio_file.read()
 
     client = genai.Client()
     response = client.models.generate_content(

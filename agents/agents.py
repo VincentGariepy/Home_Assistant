@@ -175,18 +175,18 @@ def code_agent(messages: list[BaseMessage] | str):
     return _tool_calling_agent(code_agent, messages)
 
 
-def _init_quirky_agent(tone: str, language: str):
+def _init_quirky_agent(tone: str):
     quirky_agent_config = config['quirky_agent']
 
     llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
                                 model=quirky_agent_config['llm_config']['model_name'],
                                 temperature=quirky_agent_config['llm_config']['temperature'])
     if tone == 'sassy':
-        system_prompt = quirky_agent_config['prompt_config']['system_message_sassy'].format(language)
+        system_prompt = quirky_agent_config['prompt_config']['system_message_sassy']
     elif tone == 'scottish':
-        system_prompt = quirky_agent_config['prompt_config']['system_message_scottish'].format(language)
+        system_prompt = quirky_agent_config['prompt_config']['system_message_scottish']
     else:
-        system_prompt = quirky_agent_config['prompt_config']['system_message_neutral'].format(language)
+        system_prompt = quirky_agent_config['prompt_config']['system_message_neutral']
 
     return AgentInitData(tools_by_name={}, 
                          llm_with_tools=llm,
@@ -194,7 +194,7 @@ def _init_quirky_agent(tone: str, language: str):
 
 @entrypoint()
 def quirky_agent(input: dict):
-    quirky_agent_data = _init_quirky_agent(input['tone'], input['language'])
+    quirky_agent_data = _init_quirky_agent(input['tone'])
 
     return _tool_calling_agent(quirky_agent_data, input['messages'])
 
@@ -225,7 +225,7 @@ def _create_main_agent_tools():
 
     return [route_agent_tool, weather_agent_tool, online_search_agent_tool, code_agent_tool]
 
-def _init_main_agent(tone: str, language: str):
+def _init_main_agent(tone: str):
     main_agent_config = config['main_agent']
     llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
                                 model=main_agent_config['llm_config']['model_name'],
@@ -243,8 +243,7 @@ def _init_main_agent(tone: str, language: str):
     else:
         system_prompt = main_agent_config['prompt_config']['system_message_neutral']
 
-    system_prompt = system_prompt.format(language,
-                                    list(tools_by_name.keys()),
+    system_prompt = system_prompt.format(list(tools_by_name.keys()),
                                     date.today().strftime('%Y-%m-%d'))
 
     return AgentInitData(tools_by_name=tools_by_name, 
@@ -253,6 +252,6 @@ def _init_main_agent(tone: str, language: str):
 
 @entrypoint()
 def main_agent(input: dict):
-    main_agent = _init_main_agent(tone=input["tone"], language=input["language"])
+    main_agent = _init_main_agent(tone=input["tone"])
 
     return _tool_calling_agent(main_agent, input["messages"])
