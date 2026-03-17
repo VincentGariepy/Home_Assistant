@@ -9,10 +9,9 @@ AI_API_KEY = os.getenv('GOOGLE_AI_KEY')
 with open('agents/agents_config.yml', 'r') as file:
     CONFIG = yaml.safe_load(file)
 
-import asyncio
 import pyaudio
-import sys
 from google import genai
+from contextlib import contextmanager
 
 # Gemini Audio Configuration
 # 24kHz, 16-bit PCM, Mono is standard for Gemini Live
@@ -20,10 +19,6 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 24000 
 CHUNK = 512
-
-import os
-import sys
-from contextlib import contextmanager
 
 # Define the Error Silencer Context Manager
 @contextmanager
@@ -94,23 +89,25 @@ def _get_text_to_speech_config(content:str, tone: str):
         }
     }
 
-async def convert_text_to_speech(content: str, tone: str):
+def setup_audio_stream(format, channels, rate):
     with ignore_alsa_warnings():
         p = pyaudio.PyAudio()
     
-    # 1. Select Device (Crucial for Pi)
     output_device_index = _get_output_device_index(p)
     try:
-        stream = p.open(format=FORMAT,
-                        channels=CHANNELS,
-                        rate=RATE,
+        stream = p.open(format=format,
+                        channels=channels,
+                        rate=rate,
                         output=True,
                         output_device_index=output_device_index)
+        return stream, p
     except OSError as e:
         print(f"Error opening audio device: {e}")
         print("Try changing the sample rate to 44100 or 48000 if your hardware doesn't support 24000.")
-        return
+        raise
 
+async def convert_text_to_speech(content: str, tone: str):
+    stream, p = setup_audio_stream(FORMAT, CHANNELS, RATE)
     client = genai.Client(api_key=AI_API_KEY)
     content, model_id, config = _get_text_to_speech_config(content=content, tone=tone)
 

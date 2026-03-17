@@ -10,6 +10,7 @@ from audio_functions.genai_audio_utils import convert_text_to_speech, convert_sp
 from audio_functions.audio_listening import get_user_request
 from agents.agents import main_agent, quirky_agent
 from agents.utils import async_resilient
+from tools.timer_tool import check_timers
 
 class HomeAssistant():
     def __init__(self, memory_timeframe: int = 5, no_audio: bool = False, quirky_response_interval: Literal[None, 3, 5, 10, 15] = 10):
@@ -22,6 +23,12 @@ class HomeAssistant():
 
     async def main(self):
         while True:
+            timers_rang = check_timers()
+
+            if timers_rang:
+                for timer in timers_rang:
+                    await self.respond_audio(f"Timer {timer} has finished.", tone='neutral')
+
             user_request, wake_word = self.listen_for_user_request()
             user_request_text = self.convert_audio_request_to_text(audio_bytes=user_request.read())
 
