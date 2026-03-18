@@ -20,6 +20,7 @@ from langchain_google_community import GoogleSearchAPIWrapper, GoogleSearchResul
 from tools.utils import ADDRESSES
 from tools.places_tools import get_route
 from tools.weather_tools import get_current_weather, get_daily_weather, get_hourly_weather
+from tools.timer_tool import add_timer, timer_data, convert_hours_to_seconds, convert_minutes_to_seconds
 from agents.agent_init_data import AgentInitData
 
 ai_api_key = os.getenv('GOOGLE_AI_KEY')
@@ -174,6 +175,28 @@ def code_agent(messages: list[BaseMessage] | str):
 
     return _tool_calling_agent(code_agent, messages)
 
+def _init_timer_agent():
+    timer_agent_config = config['timer_agent']
+    llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
+                                model=timer_agent_config['llm_config']['model_name'],
+                                temperature=timer_agent_config['llm_config']['temperature'])
+    tools = [add_timer, timer_data, convert_hours_to_seconds, convert_minutes_to_seconds]
+
+    tools_by_name = {tool.name: tool for tool in tools}
+    llm_with_tools = llm.bind_tools(tools)
+
+
+    system_prompt = timer_agent_config['prompt_config']['system_message']
+
+    return AgentInitData(tools_by_name=tools_by_name, 
+                         llm_with_tools=llm_with_tools,
+                         system_prompt=system_prompt)
+
+@entrypoint()
+def timer_agent(messages: list[BaseMessage] | str):
+    timer_agent_data = _init_timer_agent()
+
+    return _tool_calling_agent(timer_agent_data, messages)
 
 def _init_quirky_agent(tone: str):
     quirky_agent_config = config['quirky_agent']
@@ -222,8 +245,13 @@ def _create_main_agent_tools():
         description="A tool for getting code execution information. Takes a prompt as input.",
         func=code_agent.invoke,
     )
+    timer_agent_tool = Tool(
+        name="timer_agent_tool",
+        description="A tool for managing timers. Takes a prompt as input.",
+        func=timer_agent.invoke,
+    )
 
-    return [route_agent_tool, weather_agent_tool, online_search_agent_tool, code_agent_tool]
+    return [route_agent_tool, weather_agent_tool, online_search_agent_tool, code_agent_tool, timer_agent_tool]
 
 def _init_main_agent(tone: str):
     main_agent_config = config['main_agent']

@@ -23,6 +23,15 @@ class Timers():
     def list_timers(self):
         return list(self.timers.keys())
     
+    def timer_data(self):
+        timer_data = {}
+        for name, timer in self.timers.items():
+            timer_data[name] = {
+                'elapsed_time': timer.get_elapsed_time(),
+                'remaining_time': timer.get_remaining_time()
+             }
+        return timer_data
+    
     def delete_timer(self, name):
         if name not in self.timers:
             raise ValueError(f"Timer with name '{name}' does not exist.")
@@ -94,11 +103,22 @@ class Timer():
     
 timers_manager = Timers()
 
-def add_timer(name, total_time):
+def add_timer(name: str, total_time: int) -> None:
+    """Add a timer with the given name and total time in seconds."""
     timers_manager.create_timer(name, total_time)
 
-def list_timers():
-    return timers_manager.list_timers()
+def timer_data() -> dict:
+    """Return a dictionary with timer names as keys and their elapsed and remaining time as values."""
+    return timers_manager.timer_data()
 
-def check_timers():
+def check_timers() -> list:
+    """Return a list of timer names that have completed."""
     return timers_manager.check_timers()
+
+def convert_minutes_to_seconds(minutes: int) -> int:
+    """Convert minutes to seconds."""
+    return minutes * 60
+
+def convert_hours_to_seconds(hours: int) -> int:
+    """Convert hours to seconds."""
+    return hours * 3600

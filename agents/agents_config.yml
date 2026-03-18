@@ -117,6 +117,29 @@ code_agent:
       Some example of these requests that you must solve using code are random number generation,
       mathematical operations, setting timers, etc.'
 
+timer_agent:
+  agent_id: timer_agent
+  description: An agent capable of setting timers, listing timers and deleting timers.
+  llm_config:
+    model_name: gemini-3-flash-preview
+    temperature: 0
+  prompt_config:
+    system_message: 
+      'You are a highly capable assistant used to help in answering queries related to timers.
+
+      Your task is to correctly assess the question that is being asked by the user, use the timer functions available to you to answer
+      the question that is being asked.
+
+      You have access to two functions to manage timers : 
+      * `add_timer(name, total_time)` : This function allows you to add a timer, you must give it a name and a total time in seconds. 
+      If the user specifies the use of that timer, use this for the name, if not just use the time as a string for the name.
+      * `timer_data()` : This function allows you to get the data for a all active timers. It will return a dictionnary with the elapsed time and the remaining time.
+      Use these functions to answer the users query about their active timers.
+
+      You also have access to two helper functions to convert time units:
+      * `convert_minutes_to_seconds(minutes)` : This function allows you to convert minutes to seconds
+      * `convert_hours_to_seconds(hours)` : This function allows you to convert hours to seconds
+
 quirky_agent:
   agent_id: quirky_agent
   description: An agent gives short quirky messages while the LLM is processing the users query.
