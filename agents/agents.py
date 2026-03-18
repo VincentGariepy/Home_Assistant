@@ -22,6 +22,7 @@ from tools.places_tools import get_route
 from tools.weather_tools import get_current_weather, get_daily_weather, get_hourly_weather
 from tools.timer_tool import add_timer, timer_data, convert_hours_to_seconds, convert_minutes_to_seconds
 from agents.agent_init_data import AgentInitData
+from log_config.logging_config import get_conversation_logger, logger
 
 ai_api_key = os.getenv('GOOGLE_AI_KEY')
 maps_api_key = os.getenv('GOOGLE_MAPS_KEY')
@@ -30,15 +31,41 @@ google_cse_id = os.getenv('GOOGLE_CSE_ID')
 with open('agents/agents_config.yml', 'r') as file:
     config = yaml.safe_load(file)
 
+_conversation_logger = get_conversation_logger()
+
 @task
-def _call_llm(messages: list[BaseMessage], agent_data: AgentInitData):
+def _call_llm(messages: list[BaseMessage], agent_data: AgentInitData, agent_name: str = "unknown"):
     """LLM decides whether to call a tool or not"""
     if type(messages) == str:
         messages = [HumanMessage(content=messages)]
 
-    return agent_data.llm_with_tools.invoke(
+    response = agent_data.llm_with_tools.invoke(
         [SystemMessage(content=agent_data.system_prompt)] + messages
     )
+    
+    # Extract and log token usage if available
+    try:
+        if hasattr(response, 'response_metadata'):
+            metadata = response.response_metadata
+            if 'usage_metadata' in metadata:
+                usage = metadata['usage_metadata']
+                input_tokens = usage.get('input_tokens', 0)
+                output_tokens = usage.get('output_tokens', 0)
+                total_tokens = input_tokens + output_tokens
+                
+                model_name = agent_data.llm_with_tools.model_name if hasattr(agent_data.llm_with_tools, 'model_name') else "unknown"
+                _conversation_logger.log_token_usage(
+                    agent_name=agent_name,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    model=model_name,
+                )
+                logger.debug(f"Token usage for {agent_name}: input={input_tokens}, output={output_tokens}, total={total_tokens}")
+    except Exception as e:
+        logger.debug(f"Could not extract token usage: {e}")
+    
+    return response
 
 @task
 def _call_tool(tool_call: ToolCall, agent_data: AgentInitData):
@@ -46,10 +73,10 @@ def _call_tool(tool_call: ToolCall, agent_data: AgentInitData):
     tool = agent_data.tools_by_name[tool_call["name"]]
     return tool.invoke(tool_call)
 
-def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] | str):
+def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] | str, agent_name: str = "unknown"):
     if type(messages) == str:
         messages = [HumanMessage(content=messages)]
-    llm_response = _call_llm(messages, agent_data).result()
+    llm_response = _call_llm(messages, agent_data, agent_name).result()
 
     while True:
         if not llm_response.tool_calls:
@@ -61,7 +88,7 @@ def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] |
         ]
         tool_results = [fut.result() for fut in tool_result_futures]
         messages = add_messages(messages, [llm_response, *tool_results])
-        llm_response = _call_llm(messages, agent_data).result()
+        llm_response = _call_llm(messages, agent_data, agent_name).result()
 
     messages = add_messages(messages, llm_response)
     return messages
@@ -85,8 +112,8 @@ def _init_route_agent():
 @entrypoint()
 def route_agent(messages: list[BaseMessage] | str):
     route_agent_data = _init_route_agent()
-
-    return _tool_calling_agent(route_agent_data, messages)
+    logger.info("Route agent called")
+    return _tool_calling_agent(route_agent_data, messages, agent_name="route_agent")
    
 
 def _init_weather_agent():
@@ -111,8 +138,8 @@ def _init_weather_agent():
 @entrypoint()
 def weather_agent(messages: list[BaseMessage] | str):
     weather_agent_data = _init_weather_agent()
-
-    return _tool_calling_agent(weather_agent_data, messages)
+    logger.info("Weather agent called")
+    return _tool_calling_agent(weather_agent_data, messages, agent_name="weather_agent")
 
 def _init_online_search_agent():
     online_search_agent_config = config['online_search_agent']
@@ -141,8 +168,8 @@ def _init_online_search_agent():
 @entrypoint()
 def online_search_agent(messages: list[BaseMessage] | str):
     online_search_agent_data = _init_online_search_agent()
-
-    return _tool_calling_agent(online_search_agent_data, messages)
+    logger.info("Online search agent called")
+    return _tool_calling_agent(online_search_agent_data, messages, agent_name="online_search_agent")
 
 def _init_code_agent():
     online_search_agent_config = config['code_agent']
@@ -171,9 +198,9 @@ def _init_code_agent():
 
 @entrypoint()
 def code_agent(messages: list[BaseMessage] | str):
-    code_agent = _init_code_agent()
-
-    return _tool_calling_agent(code_agent, messages)
+    code_agent_data = _init_code_agent()
+    logger.info("Code agent called")
+    return _tool_calling_agent(code_agent_data, messages, agent_name="code_agent")
 
 def _init_timer_agent():
     timer_agent_config = config['timer_agent']
@@ -195,8 +222,8 @@ def _init_timer_agent():
 @entrypoint()
 def timer_agent(messages: list[BaseMessage] | str):
     timer_agent_data = _init_timer_agent()
-
-    return _tool_calling_agent(timer_agent_data, messages)
+    logger.info("Timer agent called")
+    return _tool_calling_agent(timer_agent_data, messages, agent_name="timer_agent")
 
 def _init_quirky_agent(tone: str):
     quirky_agent_config = config['quirky_agent']
@@ -280,6 +307,7 @@ def _init_main_agent(tone: str):
 
 @entrypoint()
 def main_agent(input: dict):
-    main_agent = _init_main_agent(tone=input["tone"])
-
-    return _tool_calling_agent(main_agent, input["messages"])
+    tone = input.get("tone", "neutral")
+    main_agent_inst = _init_main_agent(tone=tone)
+    logger.info(f"Main agent called with tone: {tone}")
+    return _tool_calling_agent(main_agent_inst, input["messages"], agent_name=f"main_agent_{tone}")

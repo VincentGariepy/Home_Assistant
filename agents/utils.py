@@ -7,19 +7,13 @@ from audio_functions.genai_audio_utils import convert_text_to_speech
 def async_resilient(retries=3, timeout=5):
     def decorator(func):
         @wraps(func)
-        async def async_gen_wrapper(*args, **kwargs):
+        async def async_wrapper(*args, **kwargs):
             last_exception = None
             for attempt in range(retries):
                 try:
-                    # Create async generator
-                    async_gen = func(*args, **kwargs)
-                    start_time = asyncio.get_event_loop().time()
-                    async for item in async_gen:
-                        # Check if we've exceeded the timeout
-                        if timeout and (asyncio.get_event_loop().time() - start_time) > timeout:
-                            raise asyncio.TimeoutError("Async generator exceeded timeout")
-                        yield item
-                    return
+                    # Call the async function with timeout
+                    result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
+                    return result
                 except asyncio.TimeoutError:
                     print(f"Attempt {attempt + 1} timed out.")
                     if attempt == retries - 1:
@@ -40,5 +34,5 @@ def async_resilient(retries=3, timeout=5):
                     await asyncio.sleep(2 ** attempt)
             
             raise last_exception
-        return async_gen_wrapper
+        return async_wrapper
     return decorator

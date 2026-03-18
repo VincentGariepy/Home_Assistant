@@ -111,21 +111,22 @@ async def convert_text_to_speech(content: str, tone: str):
     client = genai.Client(api_key=AI_API_KEY)
     content, model_id, config = _get_text_to_speech_config(content=content, tone=tone)
 
-    async with client.aio.live.connect(model=model_id, config=config) as session: 
-        await session.send(input=content, end_of_turn=True)       
-        async for response in session.receive():
-            server_content = response.server_content
-            if server_content is not None:
-                model_turn = server_content.model_turn
-                if model_turn is not None:
-                    for part in model_turn.parts:
-                        if part.inline_data:
-                            # Play audio chunk immediately
-                            stream.write(part.inline_data.data)
-
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
+    try:
+        async with client.aio.live.connect(model=model_id, config=config) as session: 
+            await session.send(input=content, end_of_turn=True)       
+            async for response in session.receive():
+                server_content = response.server_content
+                if server_content is not None:
+                    model_turn = server_content.model_turn
+                    if model_turn is not None:
+                        for part in model_turn.parts:
+                            if part.inline_data:
+                                # Play audio chunk immediately
+                                stream.write(part.inline_data.data)
+    finally:
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
 
 def convert_speech_to_text(file_path: str = None, audio_bytes: bytes = None) -> str:
     agent_config = CONFIG['speech_to_text_agent']['llm_config']

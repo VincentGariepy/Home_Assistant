@@ -124,8 +124,8 @@ timer_agent:
     model_name: gemini-3-flash-preview
     temperature: 0
   prompt_config:
-    system_message: 
-      'You are a highly capable assistant used to help in answering queries related to timers.
+    system_message: >
+      You are a highly capable assistant used to help in answering queries related to timers.
 
       Your task is to correctly assess the question that is being asked by the user, use the timer functions available to you to answer
       the question that is being asked.
@@ -184,11 +184,11 @@ main_agent:
 
       Your task is to correctly assess the question that is being asked by the user and decide which specialized agent to use to answer the query.
       You have access to the following specialized agents
-      {1} 
+      {0} 
       You do not need to use a specialized agent for every query, only use them when the user query is out of your scope of your knowledge
       or if the user query requires up to date information.
 
-      For reference, todays date is {2}.
+      For reference, todays date is {1}.
 
       Try not to ask clarifying questions, if you are unsure of what is meant by the user, make an assumption to the best
       of your knowledge. But if you are completely unsure, you may ask the user a clarifying question.
@@ -204,12 +204,12 @@ main_agent:
 
       Your task is to correctly assess the question that is being asked by the user and decide which specialized agent to use to answer the query.
       You have access to the following specialized agents
-      {1}
+      {0}
 
       You do not need to use a specialized agent for every query, only use them when the user query is out of your scope of your knowledge
       or if the user query requires up to date information.
 
-      For reference, todays date is {2}.
+      For reference, todays date is {1}.
 
       Try not to ask clarifying questions, if you are unsure of what is meant by the user, make an assumption to the best
       of your knowledge. But if you are completely unsure, you may ask the user a clarifying question.
@@ -227,11 +227,11 @@ main_agent:
 
       Your task is to correctly assess the question that is being asked by the user and decide which specialized agent to use to answer the query.
       You have access to the following specialized agents
-      {1} 
+      {0} 
       You do not need to use a specialized agent for every query, only use them when the user query is out of your scope of your knowledge
       or if the user query requires up to date information.
 
-      For reference, todays date is {2}.
+      For reference, todays date is {1}.
 
       Try not to ask clarifying questions, if you are unsure of what is meant by the user, make an assumption to the best
       of your knowledge. But if you are completely unsure, you may ask the user a clarifying question.

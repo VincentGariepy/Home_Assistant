@@ -97,6 +97,7 @@ class Timer():
 
     def check_timer(self):
         if datetime.datetime.now() >= self.end_time:
+            print("Ringing .. ")
             self._ring()
             return True
         return False
