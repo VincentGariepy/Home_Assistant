@@ -15,21 +15,22 @@ from tools.timer_tool import check_timers
 from log_config.logging_config import get_conversation_logger, logger
 
 class HomeAssistant():
-    def __init__(self, memory_timeframe: int = 5, no_audio: bool = False, quirky_response_interval: Literal[None, 3, 5, 10, 15] = 10, dev: bool = False):
+    def __init__(self, memory_timeframe: int = 5, no_audio: bool = False, quirky_response_interval: Literal[None, 3, 5, 10, 15] = 10):
         self.conversation_history = []
         self.memory_timeframe = memory_timeframe
         self.end_memory = datetime.today() + timedelta(minutes=memory_timeframe)
         self.quirky_responses = []
         self.no_audio = no_audio
         self.quirky_response_interval = quirky_response_interval
-        self.dev = dev
-        self.conversation_logger = get_conversation_logger(dev=dev)
+        self.conversation_logger = get_conversation_logger()
         self.conversation_id = str(uuid.uuid4())
-        logger.info(f"HomeAssistant initialized with conversation_id: {self.conversation_id} (dev={dev})")
+        logger.info(f"HomeAssistant initialized with conversation_id: {self.conversation_id}")
 
-    async def main(self):
+    async def _check_timers_periodically(self):
+        """Background task that checks timers periodically."""
         while True:
             try:
+                await asyncio.sleep(0.1)  # Check every 100ms
                 timers_rang = check_timers()
 
                 if timers_rang:
@@ -37,31 +38,44 @@ class HomeAssistant():
                         message = f"Timer {timer} has finished."
                         await self.respond_audio(message, tone='neutral')
                         logger.info(f"Timer alarm: {timer}")
-
-                if self.no_audio:
-                    wake_word = "hey_jarvis"
-                    user_request_text = input("Type your request: ")
-                    logger.info(f"User text request received with wake_word: {wake_word}")
-                    logger.debug(f"User text input: {user_request_text}")
-                else:
-                    user_request, wake_word = self.listen_for_user_request()
-                    user_request_text = self.convert_audio_request_to_text(audio_bytes=user_request.read())
-                    logger.info(f"User request received with wake_word: {wake_word}")
-                    logger.debug(f"User input: {user_request_text}")
-                match wake_word:
-                    case 'hey_jarvis':
-                        await self.get_answer(user_request_text, tone='neutral')
-                    case 'models/wake_words/a_yi_la_poot.onnx':
-                        await self.get_answer(user_request_text, tone='sassy')
-                    case 'models/wake_words/oiy_mate.onnx':
-                        await self.get_answer(user_request_text, tone='scottish')
             except Exception as e:
-                logger.error(f"Error in main loop: {e}", exc_info=True)
-                self.conversation_logger.log_error(
-                    error_type=type(e).__name__,
-                    error_message=str(e),
-                    context={"conversation_id": self.conversation_id}
-                )
+                logger.error(f"Error in timer check task: {e}", exc_info=True)
+
+    async def main(self):
+        # Start the background timer check task
+        timer_task = asyncio.create_task(self._check_timers_periodically())
+        
+        try:
+            while True:
+                try:
+                    if self.no_audio:
+                        wake_word = "hey_jarvis"
+                        # Run blocking input in a thread so event loop can continue
+                        user_request_text = await asyncio.to_thread(input, "Type your request: ")
+                        logger.info(f"User text request received with wake_word: {wake_word}")
+                        logger.debug(f"User text input: {user_request_text}")
+                    else:
+                        # Run blocking listen in a thread so event loop can continue
+                        user_request, wake_word = await asyncio.to_thread(self.listen_for_user_request)
+                        user_request_text = self.convert_audio_request_to_text(audio_bytes=user_request.read())
+                        logger.info(f"User request received with wake_word: {wake_word}")
+                        logger.debug(f"User input: {user_request_text}")
+                    match wake_word:
+                        case 'hey_jarvis':
+                            await self.get_answer(user_request_text, tone='neutral')
+                        case 'models/wake_words/a_yi_la_poot.onnx':
+                            await self.get_answer(user_request_text, tone='sassy')
+                        case 'models/wake_words/oiy_mate.onnx':
+                            await self.get_answer(user_request_text, tone='scottish')
+                except Exception as e:
+                    logger.error(f"Error in main loop: {e}", exc_info=True)
+                    self.conversation_logger.log_error(
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                        context={"conversation_id": self.conversation_id}
+                    )
+        finally:
+            timer_task.cancel()
         
 
     @async_resilient(retries=2, timeout=120)

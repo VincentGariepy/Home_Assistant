@@ -1,8 +1,11 @@
 import asyncio
 import datetime
 import wave
+import pyaudio
+import time
 
 from distro import name
+from langchain_core.tools import tool
 
 from audio_functions.genai_audio_utils import setup_audio_stream
 
@@ -44,7 +47,8 @@ class Timers():
         for timer in self.timers.values():
             if timer.check_timer():
                 timer_names.append(timer.get_name())
-                self.delete_timer(name)
+        for timer_name in timer_names:        
+            self.delete_timer(timer.get_name())
         return timer_names
 
 class Timer():
@@ -74,17 +78,49 @@ class Timer():
         file_path = r"./tools/rooster_alarm.wav"
         try:
             f = wave.open(file_path, "rb")
-
-            stream, p = setup_audio_stream(f.getsampwidth(), f.getnchannels(), f.getframerate())
+            
+            # Get WAV file properties
+            sampwidth = f.getsampwidth()
+            channels = f.getnchannels()
+            framerate = f.getframerate()
+            
+            # Convert sampwidth to PyAudio format
+            if sampwidth == 1:
+                audio_format = pyaudio.paUInt8
+            elif sampwidth == 2:
+                audio_format = pyaudio.paInt16
+            elif sampwidth == 4:
+                audio_format = pyaudio.paInt32
+            else:
+                audio_format = pyaudio.paInt16  # Default fallback
+            
+            # Try the original sample rate first; if it fails, try common alternatives
+            sample_rates_to_try = [framerate, 44100, 48000]
+            
+            stream = None
+            p = None
+            for rate in sample_rates_to_try:
+                try:
+                    stream, p = setup_audio_stream(audio_format, channels, rate)
+                    break
+                except OSError:
+                    if stream:
+                        stream.close()
+                    if p:
+                        p.terminate()
+                    continue
+            
+            if stream is None:
+                raise RuntimeError("Could not open audio stream with any supported sample rate")
+            
             chunk = 1024
-
             data = f.readframes(chunk)
 
             for _ in range(3):  # Ring the alarm 3 times
                 while len(data) > 0:
                     stream.write(data)
                     data = f.readframes(chunk)
-                datetime.time.sleep(2)
+                time.sleep(2)
                 f.rewind()
                 data = f.readframes(chunk)
 
@@ -104,22 +140,58 @@ class Timer():
     
 timers_manager = Timers()
 
+@tool
 def add_timer(name: str, total_time: int) -> None:
-    """Add a timer with the given name and total time in seconds."""
+    """
+    Add a timer with the given name and total time in seconds.
+    
+    Args:
+        name (str): The name of the timer.
+        total_time (int): The total time for the timer in seconds (max 86400 seconds or 24 hours).
+    """
     timers_manager.create_timer(name, total_time)
 
+@tool
 def timer_data() -> dict:
-    """Return a dictionary with timer names as keys and their elapsed and remaining time as values."""
+    """
+    Return a dictionary with timer names as keys and their elapsed and remaining time as values.
+    
+    Returns:
+        dict: A dictionary where keys are timer names and values are dictionaries with 'elapsed_time' and 'remaining_time'.
+    """
     return timers_manager.timer_data()
 
 def check_timers() -> list:
-    """Return a list of timer names that have completed."""
+    """
+    Checks all timers and `rings` the ones that have finished. Then return a list of timer names that have completed.
+    
+    Returns:
+        list: A list of timer names that have completed.
+    """
     return timers_manager.check_timers()
 
+@tool
 def convert_minutes_to_seconds(minutes: int) -> int:
-    """Convert minutes to seconds."""
+    """
+    Convert minutes to seconds.
+    
+    Args:
+        minutes (int): The number of minutes to convert.
+
+    Returns:
+        int: The equivalent number of seconds.
+    """
     return minutes * 60
 
+@tool
 def convert_hours_to_seconds(hours: int) -> int:
-    """Convert hours to seconds."""
+    """
+    Convert hours to seconds.
+    
+    Args:
+        hours (int): The number of hours to convert.
+    
+    Returns:
+        int: The equivalent number of seconds.
+    """
     return hours * 3600
