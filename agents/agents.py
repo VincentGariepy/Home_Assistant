@@ -1,5 +1,6 @@
 import os
 import yaml
+import json
 from datetime import date
 
 from google.genai import types
@@ -22,6 +23,7 @@ from tools.places_tools import get_route
 from tools.weather_tools import get_current_weather, get_daily_weather, get_hourly_weather
 from tools.timer_tool import add_timer, timer_data, convert_hours_to_seconds, convert_minutes_to_seconds
 from agents.agent_init_data import AgentInitData
+from agents.utils import extract_last_ai_message
 from log_config.logging_config import get_conversation_logger, logger
 
 ai_api_key = os.getenv('GOOGLE_AI_KEY')
@@ -42,26 +44,27 @@ def _call_llm(messages: list[BaseMessage], agent_data: AgentInitData, agent_name
     response = agent_data.llm_with_tools.invoke(
         [SystemMessage(content=agent_data.system_prompt)] + messages
     )
-    
+    logger.debug(f"LLM response for {agent_name}: {response}")
     # Extract and log token usage if available
     try:
-        if hasattr(response, 'response_metadata'):
+        if hasattr(response, 'response_metadata') and hasattr(response, 'usage_metadata'):
             metadata = response.response_metadata
-            if 'usage_metadata' in metadata:
-                usage = metadata['usage_metadata']
-                input_tokens = usage.get('input_tokens', 0)
-                output_tokens = usage.get('output_tokens', 0)
-                total_tokens = input_tokens + output_tokens
-                
-                model_name = agent_data.llm_with_tools.model_name if hasattr(agent_data.llm_with_tools, 'model_name') else "unknown"
-                _conversation_logger.log_token_usage(
-                    agent_name=agent_name,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    total_tokens=total_tokens,
-                    model=model_name,
-                )
-                logger.debug(f"Token usage for {agent_name}: input={input_tokens}, output={output_tokens}, total={total_tokens}")
+            usage = response.usage_metadata
+            input_tokens = usage.get('input_tokens', 0)
+            output_tokens = usage.get('output_tokens', 0)
+            reasoning_tokens = usage.get('output_token_details', {}).get('reasoning', 0)
+            total_tokens = input_tokens + output_tokens
+            model_name = metadata.get('model_name', 'unknown')
+            
+            _conversation_logger.log_token_usage(
+                agent_name=agent_name,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                reasoning_tokens=reasoning_tokens,
+                total_tokens=total_tokens,
+                model_name=model_name,
+            )
+            logger.debug(f"Token usage for {agent_name}: input={input_tokens}, output={output_tokens}, reasoning={reasoning_tokens}, total={total_tokens}")
     except Exception as e:
         logger.debug(f"Could not extract token usage: {e}")
     
@@ -76,12 +79,16 @@ def _call_tool(tool_call: ToolCall, agent_data: AgentInitData):
 def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] | str, agent_name: str = "unknown"):
     if type(messages) == str:
         messages = [HumanMessage(content=messages)]
+    request = messages[-1].content if messages else ""
     llm_response = _call_llm(messages, agent_data, agent_name).result()
 
+    tool_results = []
+    tool_calls = []
     while True:
-        if not llm_response.tool_calls:
+        if not llm_response.tool_calls:  
             break
-
+        
+        tool_calls += llm_response.tool_calls
         # Execute tools
         tool_result_futures = [
             _call_tool(tool_call, agent_data) for tool_call in llm_response.tool_calls
@@ -89,7 +96,23 @@ def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] |
         tool_results = [fut.result() for fut in tool_result_futures]
         messages = add_messages(messages, [llm_response, *tool_results])
         llm_response = _call_llm(messages, agent_data, agent_name).result()
+    
+    if tool_results:
+        if agent_name.startswith("main_agent"):
+            parsed_tool_results = [extract_last_ai_message(tool_results[-1].content)]
+        else:
+            parsed_tool_results = [tool_result.content for tool_result in tool_results]
+    else:
+        parsed_tool_results = []
 
+
+    _conversation_logger.log_agent_response(
+        agent_name=agent_name,
+        request=request,
+        response=llm_response.text,
+        tool_calls=tool_calls,
+        tool_call_results=parsed_tool_results,
+    )    
     messages = add_messages(messages, llm_response)
     return messages
 
@@ -246,7 +269,7 @@ def _init_quirky_agent(tone: str):
 def quirky_agent(input: dict):
     quirky_agent_data = _init_quirky_agent(input['tone'])
 
-    return _tool_calling_agent(quirky_agent_data, input['messages'])
+    return _tool_calling_agent(quirky_agent_data, input['messages'], agent_name=f"quirky_agent_{input['tone']}")
 
 def _create_main_agent_tools():
     route_agent_tool = Tool(

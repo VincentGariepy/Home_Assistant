@@ -14,8 +14,11 @@
     2. Also sync with shutdown and start up
 
 ## Code
-* Add logging of tokens
-* Add logging of agent calls
+* Fix quirky agent not respondinf on future messages.
+* Improve token analysis ?
 * Test executable
+* Update requirements.txt
+* Fix imports
+* Readme
 * Can we answer without Hey Jarvis ?
 

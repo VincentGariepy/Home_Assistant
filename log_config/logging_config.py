@@ -16,6 +16,7 @@ class ConversationLogger:
         self.log_dir = log_dir
         self.dev = dev
         self.log_dir.mkdir(exist_ok=True)
+        self.conversation_id = None
         
         # Create separate log files with dev prefix if in dev mode
         prefix = "dev_" if dev else ""
@@ -23,6 +24,10 @@ class ConversationLogger:
         self.token_usage_log_path = self.log_dir / f"{prefix}token_usage.jsonl"
         self.error_log_path = self.log_dir / f"{prefix}errors.jsonl"
     
+    def set_conversation_id(self, conversation_id: str):
+        """Set the conversation ID for logging."""
+        self.conversation_id = conversation_id
+
     def log_conversation(
         self,
         user_input: str,
@@ -30,7 +35,6 @@ class ConversationLogger:
         wake_word: str,
         tone: str,
         timestamp: Optional[datetime] = None,
-        conversation_id: Optional[str] = None,
     ) -> None:
         """Log a conversation exchange to JSONL file."""
         if timestamp is None:
@@ -38,7 +42,7 @@ class ConversationLogger:
         
         log_entry = {
             "timestamp": timestamp.isoformat(),
-            "conversation_id": conversation_id,
+            "conversation_id": self.conversation_id,
             "wake_word": wake_word,
             "tone": tone,
             "user_input": user_input,
@@ -47,13 +51,39 @@ class ConversationLogger:
         
         self._write_jsonl(self.conversation_log_path, log_entry)
     
+    def log_agent_response(
+        self,
+        agent_name: str,
+        request: str,
+        response: str,
+        tool_calls: Optional[list] = None,
+        tool_call_results: Optional[list] = None,
+        timestamp: Optional[datetime] = None,
+    ) -> None:
+        """Log an agent response to JSONL file."""
+        if timestamp is None:
+            timestamp = datetime.now()
+        
+        log_entry = {
+            "timestamp": timestamp.isoformat(),
+            "conversation_id": self.conversation_id,
+            "agent_name": agent_name,
+            "request": request,
+            "response": response,
+            "tool_calls": tool_calls,
+            "tool_call_results": tool_call_results,
+        }
+        
+        self._write_jsonl(self.conversation_log_path, log_entry)
+
     def log_token_usage(
         self,
         agent_name: str,
         input_tokens: int,
         output_tokens: int,
+        reasoning_tokens: int,
         total_tokens: int,
-        model: str,
+        model_name: str,
         timestamp: Optional[datetime] = None,
     ) -> None:
         """Log token usage for LLM calls."""
@@ -62,15 +92,17 @@ class ConversationLogger:
         
         log_entry = {
             "timestamp": timestamp.isoformat(),
+            "conversation_id": self.conversation_id,
             "agent_name": agent_name,
-            "model": model,
+            "model_name": model_name,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "reasoning_tokens": reasoning_tokens,
             "total_tokens": total_tokens,
         }
         
         self._write_jsonl(self.token_usage_log_path, log_entry)
-    
+
     def log_error(
         self,
         error_type: str,
@@ -84,6 +116,7 @@ class ConversationLogger:
         
         log_entry = {
             "timestamp": timestamp.isoformat(),
+            "conversation_id": self.conversation_id,
             "error_type": error_type,
             "error_message": error_message,
             "context": context or {},
@@ -120,6 +153,9 @@ def setup_python_logging(log_level=logging.INFO):
     logger = logging.getLogger("home_assistant")
     logger.setLevel(log_level)
     
+    # Clear existing handlers to avoid duplicates
+    logger.handlers.clear()
+    
     # File handler
     fh = logging.FileHandler(logs_dir / "application.log")
     fh.setLevel(log_level)
@@ -143,3 +179,11 @@ def setup_python_logging(log_level=logging.INFO):
 
 # Get the Python logger
 logger = setup_python_logging()
+
+def set_debug_mode(debug: bool = False):
+    """Set the logger to debug mode."""
+    global logger
+    if debug:
+        logger.setLevel(logging.DEBUG)
+        for handler in logger.handlers:
+            handler.setLevel(logging.DEBUG)

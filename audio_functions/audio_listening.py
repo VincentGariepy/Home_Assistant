@@ -7,10 +7,11 @@ import pyaudio
 import openwakeword
 from openwakeword.model import Model
 
+from audio_functions.genai_audio_utils import ignore_alsa_warnings
+
 # To train onnx models use this notebook : https://colab.research.google.com/drive/1zzKpSnqVkUDD3FyZ-Yxw3grF7L0R1rlk#scrollTo=step4_train
 # An alternative is to use this free API : https://console.picovoice.ai/signup
-
-WAKE_WORDS = ['hey_jarvis', 'models/wake_words/a_yi_la_poot.onnx', 'models/wake_words/oiy_mate.onnx'] 
+WAKE_WORDS = [openwakeword.models['hey_jarvis']["model_path"], 'models/wake_words/a_yi_la_poot.onnx', 'models/wake_words/oiy_mate.onnx'] 
 CHANNELS = 1
 RATE = 16000
 CHUNK = 1280  # openWakeWord prefers 1280 sample chunks (80ms)
@@ -73,13 +74,14 @@ def _record_user_request(stream):
 
 def get_user_request():
     # Initialize openWakeWord with multiple models
-    oww_model = Model(wakeword_models=WAKE_WORDS, inference_framework="onnx")
+    with ignore_alsa_warnings():
+        oww_model = Model(wakeword_model_paths=WAKE_WORDS)
+        pa = pyaudio.PyAudio()
 
-    pa = pyaudio.PyAudio()
     stream = pa.open(format=pyaudio.paInt16, channels=CHANNELS, rate=RATE,
                     input=True, frames_per_buffer=CHUNK, input_device_index=_get_input_device_index(pa))
 
-    print(f"System Offline. Monitoring for: {WAKE_WORDS}")
+    print(f"System Online. Monitoring for: {[os.path.basename(path)[0:-5] for path in WAKE_WORDS]}")
 
     try:
         while True:

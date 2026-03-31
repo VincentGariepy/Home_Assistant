@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import ast
 from functools import wraps
 
 from audio_functions.genai_audio_utils import convert_text_to_speech
@@ -36,3 +37,27 @@ def async_resilient(retries=3, timeout=5):
             raise last_exception
         return async_wrapper
     return decorator
+
+def extract_last_ai_message(raw_string):
+    # Mapping the class names to generic dictionaries so Python can read them
+    class_map = {
+        'HumanMessage': lambda **kwargs: kwargs,
+        'AIMessage': lambda **kwargs: kwargs,
+        'ToolMessage': lambda **kwargs: kwargs,
+    }
+    
+    # Parse the string into a Python list
+    try:
+        data = eval(raw_string, {"__builtins__": None}, class_map)
+        
+        # Get the last item
+        last_msg = data[-1]
+        
+        # The content is a list: [{'type': 'text', 'text': '...'}]
+        # We grab the 'text' field from the first element
+        if isinstance(last_msg['content'], list):
+            return last_msg['content'][0].get('text')
+        return last_msg['content']
+        
+    except Exception as e:
+        return f"Parsing error: {e}"

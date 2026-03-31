@@ -25,6 +25,7 @@ class HomeAssistant():
         self.conversation_logger = get_conversation_logger()
         self.conversation_id = str(uuid.uuid4())
         logger.info(f"HomeAssistant initialized with conversation_id: {self.conversation_id}")
+        self.conversation_logger.set_conversation_id(self.conversation_id)
 
     async def _check_timers_periodically(self):
         """Background task that checks timers periodically."""
@@ -92,7 +93,7 @@ class HomeAssistant():
         
         if self.quirky_response_interval is not None:
             while main_agent_answer.done() is False:
-                self.quirky_responses.append(quirky_agent.invoke(input = {"messages": [self.conversation_history[-1].content] + self.quirky_responses, "tone": tone})[-1].content)
+                self.quirky_responses.append(quirky_agent.invoke(input = {"messages": [self.conversation_history[-1]] + [AIMessage(content=resp) for resp in self.quirky_responses], "tone": tone})[-1].content)
                 if not self.no_audio:
                     await self.respond_audio(self.quirky_responses[-1], tone=tone)
                 else:
@@ -121,7 +122,6 @@ class HomeAssistant():
             assistant_response=response_text,
             wake_word="",  # Wake word already logged in main()
             tone=tone,
-            conversation_id=self.conversation_id,
         )
         logger.info(f"Conversation logged for tone: {tone}")
         
@@ -145,6 +145,9 @@ class HomeAssistant():
     def clear_conversation_history(self):
         self.conversation_history = []
         self.quirky_responses = []
+        self.conversation_id = str(uuid.uuid4())
+        self.conversation_logger.set_conversation_id(self.conversation_id)
+        logger.info(f"Conversation history cleared. New conversation_id: {self.conversation_id}")
 
     async def respond_audio(self, message: str, tone: str):
         await convert_text_to_speech(message, tone=tone)
