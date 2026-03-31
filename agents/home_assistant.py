@@ -93,11 +93,11 @@ class HomeAssistant():
         
         if self.quirky_response_interval is not None:
             while main_agent_answer.done() is False:
-                self.quirky_responses.append(quirky_agent.invoke(input = {"messages": [self.conversation_history[-1]] + [AIMessage(content=resp) for resp in self.quirky_responses], "tone": tone})[-1].content)
+                self.quirky_responses.append(quirky_agent.invoke(input = {"messages": [AIMessage(content=resp) for resp in self.quirky_responses] + [self.conversation_history[-1]], "tone": tone})[-1].content)
                 if not self.no_audio:
-                    await self.respond_audio(self.quirky_responses[-1], tone=tone)
+                    await self.respond_audio(self.quirky_responses[-1][-1]['text'], tone=tone)
                 else:
-                    print(self.quirky_responses[-1])
+                    print(self.quirky_responses[-1][-1]['text'])
                 increment += 1
 
                 _, _ = await asyncio.wait(

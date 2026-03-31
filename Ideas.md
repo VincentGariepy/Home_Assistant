@@ -14,7 +14,6 @@
     2. Also sync with shutdown and start up
 
 ## Code
-* Fix quirky agent not respondinf on future messages.
 * Improve token analysis ?
 * Test executable
 * Update requirements.txt
