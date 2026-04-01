@@ -30,7 +30,7 @@ ai_api_key = os.getenv('GOOGLE_AI_KEY')
 maps_api_key = os.getenv('GOOGLE_MAPS_KEY')
 google_cse_id = os.getenv('GOOGLE_CSE_ID')
 
-with open('agents/agents_config.yml', 'r') as file:
+with open('agents/agents_config.yaml', 'r') as file:
     config = yaml.safe_load(file)
 
 _conversation_logger = get_conversation_logger()

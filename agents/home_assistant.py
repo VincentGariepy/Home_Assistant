@@ -13,6 +13,7 @@ from agents.agents import main_agent, quirky_agent
 from agents.utils import async_resilient
 from tools.timer_tool import check_timers
 from log_config.logging_config import get_conversation_logger, logger
+from log_config.log_analyzer import send_monthly_email_report
 
 class HomeAssistant():
     def __init__(self, memory_timeframe: int = 5, no_audio: bool = False, quirky_response_interval: Literal[None, 3, 5, 10, 15] = 10):
@@ -48,6 +49,7 @@ class HomeAssistant():
         
         try:
             while True:
+                send_monthly_email_report()  # Check if it's time to send the monthly report
                 try:
                     if self.no_audio:
                         wake_word = "hey_jarvis"

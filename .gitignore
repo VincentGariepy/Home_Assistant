@@ -211,3 +211,5 @@ __marimo__/
 
 # Logs
 *.jsonl
+log_config/analysis/
+log_config/monthly_email.txt

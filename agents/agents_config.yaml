@@ -243,7 +243,7 @@ text_to_speech_agent:
   agent_id: text_to_speech_agent
   description: An agent that converts text to speech.
   llm_config:
-    model_name: gemini-2.5-flash-native-audio-preview-12-2025
+    model_name: gemini-3.1-flash-live-preview
     neutral:
       voice_name: Autonoe # See here for more voices : https://ai.google.dev/gemini-api/docs/speech-generation#voices
       system_message: 
@@ -266,6 +266,6 @@ speech_to_text_agent:
   agent_id: speech_to_text_agent
   description: An agent that converts speech to text.
   llm_config:
-    model_name: gemini-2.5-flash-lite
+    model_name: gemini-3.1-flash-lite-preview
     system_message: 
       'You are a an expert speech to text agent that converts speech to text. Transcribe this audio clip, it is a home assistant request.'

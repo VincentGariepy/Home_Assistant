@@ -14,10 +14,11 @@
     2. Also sync with shutdown and start up
 
 ## Code
-* Improve token analysis ?
 * Test executable
+* Retry ?
 * Update requirements.txt
 * Fix imports
 * Readme
+* Test audio with new model and logging.
 * Can we answer without Hey Jarvis ?
 
