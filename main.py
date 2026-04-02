@@ -19,7 +19,6 @@ if args.debug_mode:
 
 from agents.home_assistant import HomeAssistant
 
-# To create an executable, run: `pyinstaller --onedir main.py``
 if __name__ == "__main__":
     memory_timeframe = args.memory_timeframe
     no_audio = args.no_audio

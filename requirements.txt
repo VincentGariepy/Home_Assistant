@@ -90,7 +90,6 @@ pydantic==2.11.9
 pydantic-settings==2.11.0
 pydantic_core==2.33.2
 Pygments==2.19.2
-pyinstaller==6.19.0
 pyinstaller-hooks-contrib==2026.1
 pyparsing==3.2.5
 python-dateutil==2.9.0.post0
