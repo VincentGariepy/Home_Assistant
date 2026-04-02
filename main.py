@@ -1,5 +1,4 @@
 import argparse
-import logging
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dev', dest='deployment_mode', action='store_true', help='Run in development mode with dev logging')

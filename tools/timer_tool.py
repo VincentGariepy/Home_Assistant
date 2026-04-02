@@ -1,10 +1,8 @@
-import asyncio
 import datetime
 import wave
 import pyaudio
 import time
 
-from distro import name
 from langchain_core.tools import tool
 
 from audio_functions.genai_audio_utils import setup_audio_stream

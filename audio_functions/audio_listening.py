@@ -1,7 +1,6 @@
 import os
 import io
 import wave
-import time
 import numpy as np
 import pyaudio
 import openwakeword

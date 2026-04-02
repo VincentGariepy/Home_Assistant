@@ -3,7 +3,6 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
-import os
 
 # Create logs directory if it doesn't exist
 LOGS_DIR = Path("logs")

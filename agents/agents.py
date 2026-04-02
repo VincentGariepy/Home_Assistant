@@ -1,9 +1,7 @@
 import os
 import yaml
-import json
 from datetime import date
-
-from google.genai import types
+from retry import retry
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import add_messages
@@ -35,6 +33,7 @@ with open('agents/agents_config.yaml', 'r') as file:
 
 _conversation_logger = get_conversation_logger()
 
+@retry(tries=3, backoff=2, jitter=(2, 5))
 @task
 def _call_llm(messages: list[BaseMessage], agent_data: AgentInitData, agent_name: str = "unknown"):
     """LLM decides whether to call a tool or not"""
