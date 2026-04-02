@@ -12,8 +12,6 @@
     2. Also sync with shutdown and start up
 
 ## Code
-* Update requirements.txt
-* Fix imports
 * Readme
 * Test executable
 * Test audio with new model and logging.
