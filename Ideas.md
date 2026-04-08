@@ -18,7 +18,7 @@
 
 
 ## Code
-* Test audio with new model and logging.
+* Test input audio with new model and token logging.
 * Can we answer without Hey Jarvis ?
 * Can we text/discord to it ?
 

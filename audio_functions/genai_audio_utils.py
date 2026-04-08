@@ -4,10 +4,9 @@ import os
 import logging
 
 import yaml
-from log_config.logging_config import ConversationLogger
+from log_config.logging_config import get_conversation_logger, logger
 
-logger = logging.getLogger(__name__)
-_conversation_logger = ConversationLogger()
+_conversation_logger = get_conversation_logger()
 
 AI_API_KEY = os.getenv('GOOGLE_AI_KEY')
 with open('agents/agents_config.yaml', 'r') as file:
@@ -91,15 +90,17 @@ def _get_text_to_speech_config(content:str, tone: str):
     logger.debug(f"Using voice: {llm_config['voice_name']}")
     content = llm_config['system_message'].format(content)
 
-    return content, agent_config['model_name'], {'response_modalities': ["AUDIO"],
-        'speech_config': {
-            'voice_config': {
-                'prebuilt_voice_config': {
-                    'voice_name': llm_config['voice_name'],
-                }
-            }
-        }
-    }
+    config = types.LiveConnectConfig(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name=llm_config['voice_name']
+                )
+            )
+        )
+    )
+    return content, agent_config['model_name'], config
 
 def setup_audio_stream(format, channels, rate):
     logger.info(f"Setting up audio stream: format={format}, channels={channels}, rate={rate}Hz")
@@ -128,41 +129,39 @@ async def convert_text_to_speech(content: str, tone: str):
 
     try:
         logger.debug(f"Connecting to model: {model_id}")
-        async with client.aio.live.connect(model=model_id, config=config) as session: 
-            await session.send(input=content, end_of_turn=True)
-            logger.debug("Text sent to model, waiting for audio response...")
-            audio_chunks = 0
+        usage_metadata = None
+        async with client.aio.live.connect(model=model_id, config=config) as session:
+            await session.send_realtime_input(text=content)
             async for response in session.receive():
-                server_content = response.server_content
-                if server_content is not None:
-                    model_turn = server_content.model_turn
-                    if model_turn is not None:
-                        for part in model_turn.parts:
-                            if part.inline_data:
-                                # Play audio chunk immediately
-                                stream.write(part.inline_data.data)
-                                audio_chunks += 1
-            logger.info(f"Text-to-speech completed. Played {audio_chunks} audio chunks")
+                if response.server_content and response.server_content.model_turn:
+                    for part in response.server_content.model_turn.parts:
+                        if part.inline_data:
+                            audio_data = part.inline_data.data
+                            stream.write(audio_data)
+                if response.usage_metadata and response.usage_metadata.prompt_token_count:
+                    usage_metadata = response.usage_metadata
+
+
+        logger.info(f"Text-to-speech completed.")
             
-            # Log token usage if available
-            try:
-                if hasattr(session, 'response_metadata') and hasattr(session, 'usage_metadata'):
-                    usage = session.usage_metadata
-                    input_tokens = usage.get('input_tokens', 0)
-                    output_tokens = usage.get('output_tokens', 0)
-                    total_tokens = input_tokens + output_tokens
-                    
-                    _conversation_logger.log_token_usage(
-                        agent_name='text_to_speech_agent',
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        reasoning_tokens=0,
-                        total_tokens=total_tokens,
-                        model_name=model_id,
-                    )
-                    logger.debug(f"Token usage for text-to-speech: input={input_tokens}, output={output_tokens}, total={total_tokens}")
-            except Exception as e:
-                logger.debug(f"Could not extract token usage from TTS response: {e}")
+        # Log token usage if available
+        try:
+            if hasattr(usage_metadata, 'prompt_tokens_details'):
+                input_tokens = usage_metadata.prompt_tokens_details[0].token_count
+                output_tokens = usage_metadata.prompt_tokens_details[1].token_count
+                total_tokens = input_tokens + output_tokens
+                
+                _conversation_logger.log_token_usage(
+                    agent_name='text_to_speech_agent',
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    reasoning_tokens=0,
+                    total_tokens=total_tokens,
+                    model_name=model_id,
+                )
+                logger.debug(f"Token usage for text-to-speech: input={input_tokens}, output={output_tokens}, total={total_tokens}")
+        except Exception as e:
+            logger.debug(f"Could not extract token usage from TTS response: {e}")
     except Exception as e:
         logger.error(f"Error during text-to-speech conversion: {e}", exc_info=True)
         raise
@@ -183,7 +182,7 @@ def convert_speech_to_text(file_path: str = None, audio_bytes: bytes = None) -> 
             audio_bytes = audio_file.read()
         logger.debug(f"Loaded {len(audio_bytes)} bytes from audio file")
 
-    client = genai.Client()
+    client = genai.Client(api_key=AI_API_KEY)
     try:
         logger.debug(f"Sending audio to model: {agent_config['model_name']}")
         response = client.models.generate_content(

@@ -52,7 +52,7 @@ class HomeAssistant():
                 send_monthly_email_report()  # Check if it's time to send the monthly report
                 try:
                     if self.no_audio:
-                        wake_word = "hey_jarvis"
+                        wake_word = "hey_jarvis_v0.1"
                         # Run blocking input in a thread so event loop can continue
                         user_request_text = await asyncio.to_thread(input, "Type your request: ")
                         logger.info(f"User text request received with wake_word: {wake_word}")
@@ -64,12 +64,14 @@ class HomeAssistant():
                         logger.info(f"User request received with wake_word: {wake_word}")
                         logger.debug(f"User input: {user_request_text}")
                     match wake_word:
-                        case 'hey_jarvis':
+                        case 'hey_jarvis_v0.1':
                             await self.get_answer(user_request_text, tone='neutral')
-                        case 'models/wake_words/a_yi_la_poot.onnx':
+                        case 'heille_la_pute' | 'hey_babe':
                             await self.get_answer(user_request_text, tone='sassy')
-                        case 'models/wake_words/oiy_mate.onnx':
+                        case 'oi_mate':
                             await self.get_answer(user_request_text, tone='scottish')
+                        case 'jarjar':
+                            await self.get_answer(user_request_text, tone='jarjar')
                 except Exception as e:
                     logger.error(f"Error in main loop: {e}", exc_info=True)
                     self.conversation_logger.log_error(
@@ -83,7 +85,7 @@ class HomeAssistant():
 
     @async_resilient(retries=2, timeout=120)
     async def get_answer(self, message: str,
-                         tone: Literal['neutral', 'sassy', 'scottish'] = 'neutral'):
+                         tone: Literal['neutral', 'sassy', 'scottish', 'jarjar'] = 'neutral'):
         increment = 1
         if datetime.today() > self.end_memory:
             self.clear_conversation_history()

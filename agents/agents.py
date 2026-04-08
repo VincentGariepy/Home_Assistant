@@ -317,6 +317,8 @@ def _init_main_agent(tone: str):
         system_prompt = main_agent_config['prompt_config']['system_message_sassy']
     elif tone == 'scottish':
         system_prompt = main_agent_config['prompt_config']['system_message_scottish']
+    elif tone == 'jarjar':
+        system_prompt = main_agent_config['prompt_config']['system_message_jarjar']
     else:
         system_prompt = main_agent_config['prompt_config']['system_message_neutral']
 

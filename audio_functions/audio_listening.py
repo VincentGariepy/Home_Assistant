@@ -7,10 +7,17 @@ import openwakeword
 from openwakeword.model import Model
 
 from audio_functions.genai_audio_utils import ignore_alsa_warnings
+from log_config.logging_config import logger
 
 # To train onnx models use this notebook : https://colab.research.google.com/drive/1zzKpSnqVkUDD3FyZ-Yxw3grF7L0R1rlk#scrollTo=step4_train
 # An alternative is to use this free API : https://console.picovoice.ai/signup
-WAKE_WORDS = [openwakeword.models['hey_jarvis']["model_path"], 'models/wake_words/a_yi_la_poot.onnx', 'models/wake_words/oiy_mate.onnx'] 
+WAKE_WORDS = [
+    openwakeword.models['hey_jarvis']["model_path"], 
+    'models/wake_words/heille_la_pute.onnx', 
+    'models/wake_words/oi_mate.onnx',
+    'models/wake_words/hey_babe.onnx',
+    'models/wake_words/jarjar.onnx',
+] 
 CHANNELS = 1
 RATE = 16000
 CHUNK = 1280  # openWakeWord prefers 1280 sample chunks (80ms)
@@ -41,11 +48,13 @@ def _get_input_device_index(p):
 
 def _record_user_request(stream):
     """Records audio after wake word until silence."""
-    print("Listening for request...")
+    logger.info("Listening for request...")
     frames = []
-    silence_threshold = 500  # Adjust based on mic sensitivity
+    prev_volume = 0
+    silence_threshold = 0.5
     silent_chunks = 0
     max_silence = 20 # ~2 seconds of silence (20 * 0.1s chunks)
+    min_frames = 20  # Ensure at least 2 seconds of recording before detecting silence
 
     while True:
         data = stream.read(CHUNK, exception_on_overflow=False)
@@ -53,12 +62,21 @@ def _record_user_request(stream):
         
         # Simple volume check for silence detection
         audio_data = np.frombuffer(data, dtype=np.int16)
-        if np.abs(audio_data).max() < silence_threshold:
-            silent_chunks += 1
-        else:
+        volume = np.abs(audio_data).max()
+        
+        if prev_volume == 0:
+            prev_volume = volume
             silent_chunks = 0
-            
-        if silent_chunks > max_silence:
+        elif volume * silence_threshold < prev_volume < volume * 1/silence_threshold:
+            silent_chunks += 1
+            prev_volume = volume
+        else:   
+            silent_chunks = 0
+            prev_volume = volume
+
+        # Only exit if we have enough data AND detected silence
+        if len(frames) > min_frames and silent_chunks > max_silence:
+            logger.info("Request recorded.")
             break
             
     # Wrap in RAM as a WAV file
@@ -80,7 +98,7 @@ def get_user_request():
     stream = pa.open(format=pyaudio.paInt16, channels=CHANNELS, rate=RATE,
                     input=True, frames_per_buffer=CHUNK, input_device_index=_get_input_device_index(pa))
 
-    print(f"System Online. Monitoring for: {[os.path.basename(path)[0:-5] for path in WAKE_WORDS]}")
+    logger.info(f"System Online. Monitoring for: {[os.path.basename(path)[0:-5] for path in WAKE_WORDS]}")
 
     try:
         while True:
@@ -96,14 +114,14 @@ def get_user_request():
 
             for word, score in prediction.items():
                 if score > 0.5:  # Threshold for detection
-                    print(f"\nTrigger Detected: {word} (Score: {score:.2f})")
+                    logger.info(f"\nTrigger Detected: {word} (Score: {score:.2f})")
                     
                     # Record the follow-up request
                     audio_file = _record_user_request(stream)
                     return audio_file, wake_word
                     
     except KeyboardInterrupt:
-        print("\nShutting down...")
+        logger.info("\nShutting down...")
     finally:
         stream.stop_stream()
         stream.close()

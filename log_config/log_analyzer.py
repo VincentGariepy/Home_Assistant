@@ -203,22 +203,30 @@ def show_token_usage_stats(date_filter: tuple[str, str] = None, dev: bool = Fals
         stats_by_agent[agent]['input_tokens'] += log.get('input_tokens', 0)
         stats_by_agent[agent]['output_tokens'] += log.get('output_tokens', 0)
         stats_by_agent[agent]['total_tokens'] += log.get('total_tokens', 0)
-        if 'speech' in agent_name:
-            stats_by_agent[agent]['input_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('audio_input', 0) * log.get('input_tokens', 0) / 1_000_000
+        if 'text_to_speech' in agent_name:
+            stats_by_agent[agent]['input_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('input', 0) * log.get('input_tokens', 0) / 1_000_000
             stats_by_agent[agent]['output_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('audio_output', 0) * log.get('output_tokens', 0) / 1_000_000
+
+            stats_by_model[model_name]['audio_calls'] += 1
+            stats_by_model[model_name]['input_tokens'] += log.get('input_tokens', 0)
+            stats_by_model[model_name]['audio_output_tokens'] += log.get('output_tokens', 0)
+            stats_by_model[model_name]['total_tokens'] += log.get('total_tokens', 0)
+            stats_by_model[model_name]['input_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('input', 0) * log.get('input_tokens', 0) / 1_000_000
+            stats_by_model[model_name]['audio_output_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('audio_output', 0) * log.get('output_tokens', 0) / 1_000_000
+        elif 'speech_to_text' in agent_name:
+            stats_by_agent[agent]['input_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('audio_input', 0) * log.get('input_tokens', 0) / 1_000_000
+            stats_by_agent[agent]['output_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('output', 0) * log.get('output_tokens', 0) / 1_000_000
+            
+            stats_by_model[model_name]['audio_calls'] += 1
+            stats_by_model[model_name]['audio_input_tokens'] += log.get('input_tokens', 0)
+            stats_by_model[model_name]['output_tokens'] += log.get('output_tokens', 0)
+            stats_by_model[model_name]['total_tokens'] += log.get('total_tokens', 0)
+            stats_by_model[model_name]['audio_input_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('audio_input', 0) * log.get('input_tokens', 0) / 1_000_000
+            stats_by_model[model_name]['output_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('output', 0) * log.get('output_tokens', 0) / 1_000_000
         else:
             stats_by_agent[agent]['input_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('input', 0) * log.get('input_tokens', 0) / 1_000_000
             stats_by_agent[agent]['output_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('output', 0) * log.get('output_tokens', 0) / 1_000_000
 
-        
-        if 'speech' in model_name:
-            stats_by_model[model_name]['audio_calls'] += 1
-            stats_by_model[model_name]['audio_input_tokens'] += log.get('input_tokens', 0)
-            stats_by_model[model_name]['audio_output_tokens'] += log.get('output_tokens', 0)
-            stats_by_model[model_name]['audio_total_tokens'] += log.get('total_tokens', 0)
-            stats_by_model[model_name]['audio_input_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('audio_input', 0) * log.get('input_tokens', 0) / 1_000_000
-            stats_by_model[model_name]['audio_output_cost'] += COST_CONFIG.get(model_name, {}).get('cost_per_million', {}).get('audio_output', 0) * log.get('output_tokens', 0) / 1_000_000
-        else:   
             stats_by_model[model_name]['calls'] += 1
             stats_by_model[model_name]['input_tokens'] += log.get('input_tokens', 0)
             stats_by_model[model_name]['output_tokens'] += log.get('output_tokens', 0)
