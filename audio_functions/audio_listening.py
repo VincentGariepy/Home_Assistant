@@ -53,7 +53,7 @@ def _record_user_request(stream):
     prev_volume = 0
     silence_threshold = 0.5
     silent_chunks = 0
-    max_silence = 20 # ~2 seconds of silence (20 * 0.1s chunks)
+    max_silence = 40 # ~2 seconds of silence (20 * 0.1s chunks)
     min_frames = 20  # Ensure at least 2 seconds of recording before detecting silence
 
     while True:

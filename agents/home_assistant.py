@@ -86,23 +86,33 @@ class HomeAssistant():
     @async_resilient(retries=2, timeout=120)
     async def get_answer(self, message: str,
                          tone: Literal['neutral', 'sassy', 'scottish', 'jarjar'] = 'neutral'):
-        increment = 1
         if datetime.today() > self.end_memory:
             self.clear_conversation_history()
         
         self.add_human_message(message)
+        
+        match tone:
+            case 'neutral':
+                await self.respond_audio("Hello, I'm processing your request...", tone=tone)
+            case 'sassy':
+                await self.respond_audio("Hold on, gimme a sec.", tone=tone)
+            case 'scottish':
+                await self.respond_audio("Aye, I'm on it.", tone=tone)
+            case 'jarjar':
+                await self.respond_audio("Meesa thinking, justen one moment please!", tone=tone)
 
         main_agent_answer = asyncio.create_task(
             asyncio.to_thread(main_agent.invoke, input = {"messages": self.conversation_history, "tone": tone}))
         
+        _, _ = await asyncio.wait(
+                    [main_agent_answer],
+                    timeout=self.quirky_response_interval,
+                ) 
+        
         if self.quirky_response_interval is not None:
             while main_agent_answer.done() is False:
                 self.quirky_responses.append(quirky_agent.invoke(input = {"messages": [AIMessage(content=resp) for resp in self.quirky_responses] + [self.conversation_history[-1]], "tone": tone})[-1].content)
-                if not self.no_audio:
-                    await self.respond_audio(self.quirky_responses[-1][-1]['text'], tone=tone)
-                else:
-                    print(self.quirky_responses[-1][-1]['text'])
-                increment += 1
+                await self.respond_audio(self.quirky_responses[-1][-1]['text'], tone=tone)
 
                 _, _ = await asyncio.wait(
                     [main_agent_answer],
@@ -129,10 +139,7 @@ class HomeAssistant():
         )
         logger.info(f"Conversation logged for tone: {tone}")
         
-        if not self.no_audio:
-            await self.respond_audio(response_text, tone=tone)
-        else:
-            print(response_text)
+        await self.respond_audio(response_text, tone=tone)
 
     def update_end_memory(self):
         self.end_memory = datetime.today() + timedelta(minutes=self.memory_timeframe)
@@ -154,7 +161,10 @@ class HomeAssistant():
         logger.info(f"Conversation history cleared. New conversation_id: {self.conversation_id}")
 
     async def respond_audio(self, message: str, tone: str):
-        await convert_text_to_speech(message, tone=tone)
+        if not self.no_audio:
+            await convert_text_to_speech(message, tone=tone)
+        else:
+            print(message)
 
     def convert_audio_request_to_text(self, file_path: str = None, audio_bytes: bytes = None) -> str:
         return convert_speech_to_text(file_path=file_path, audio_bytes=audio_bytes)

@@ -114,7 +114,7 @@ class Timer():
             chunk = 1024
             data = f.readframes(chunk)
 
-            for _ in range(3):  # Ring the alarm 3 times
+            for _ in range(2):  # Ring the alarm 2 times
                 while len(data) > 0:
                     stream.write(data)
                     data = f.readframes(chunk)

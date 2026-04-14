@@ -1,10 +1,13 @@
 from google import genai
 from google.genai import types
+from google.cloud.speech_v2 import SpeechClient
+from google.cloud.speech_v2.types import cloud_speech
 import os
-import logging
-
+import numpy as np
 import yaml
 from log_config.logging_config import get_conversation_logger, logger
+import asyncio
+import websockets.exceptions
 
 _conversation_logger = get_conversation_logger()
 
@@ -22,6 +25,13 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 24000 
 CHUNK = 512
+
+# WebSocket configuration for keepalive and timeout
+WS_PING_INTERVAL = 20  # Send ping every 20 seconds
+WS_PING_TIMEOUT = 10   # Wait 10 seconds for pong response
+
+GOOGLE_CLOUD_PROJECT = os.getenv('GOOGLE_CLOUD_PROJECT')
+GOOGLE_MAPS_KEY = os.getenv('GOOGLE_MAPS_KEY')
 
 # Define the Error Silencer Context Manager
 @contextmanager
@@ -102,6 +112,21 @@ def _get_text_to_speech_config(content:str, tone: str):
     )
     return content, agent_config['model_name'], config
 
+async def _receive_with_timeout(session):
+    """
+    Helper async generator that wraps session.receive() with better error handling.
+    Yields responses from the session until the stream is exhausted.
+    """
+    try:
+        async for response in session.receive():
+            yield response
+    except websockets.exceptions.ConnectionClosedError as e:
+        logger.error(f"WebSocket connection closed during receive: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Error receiving from session: {e}")
+        raise
+
 def setup_audio_stream(format, channels, rate):
     logger.info(f"Setting up audio stream: format={format}, channels={channels}, rate={rate}Hz")
     with ignore_alsa_warnings():
@@ -130,16 +155,23 @@ async def convert_text_to_speech(content: str, tone: str):
     try:
         logger.debug(f"Connecting to model: {model_id}")
         usage_metadata = None
+        
         async with client.aio.live.connect(model=model_id, config=config) as session:
             await session.send_realtime_input(text=content)
-            async for response in session.receive():
-                if response.server_content and response.server_content.model_turn:
-                    for part in response.server_content.model_turn.parts:
-                        if part.inline_data:
-                            audio_data = part.inline_data.data
-                            stream.write(audio_data)
-                if response.usage_metadata and response.usage_metadata.prompt_token_count:
-                    usage_metadata = response.usage_metadata
+            
+            # Use a timeout for receiving audio to prevent hanging
+            try:
+                async for response in asyncio.wait_for(_receive_with_timeout(session), timeout=120):
+                    if response.server_content and response.server_content.model_turn:
+                        for part in response.server_content.model_turn.parts:
+                            if part.inline_data:
+                                stream.write(part.inline_data.data)
+                    if response.usage_metadata and response.usage_metadata.prompt_token_count:
+                        usage_metadata = response.usage_metadata
+            except asyncio.TimeoutError:
+                logger.error(f"Text-to-speech response timed out after 120 seconds")
+                raise
+
 
 
         logger.info(f"Text-to-speech completed.")
@@ -148,7 +180,7 @@ async def convert_text_to_speech(content: str, tone: str):
         try:
             if hasattr(usage_metadata, 'prompt_tokens_details'):
                 input_tokens = usage_metadata.prompt_tokens_details[0].token_count
-                output_tokens = usage_metadata.prompt_tokens_details[1].token_count
+                output_tokens = usage_metadata.prompt_tokens_details[1].token_count + usage_metadata.candidates_token_count
                 total_tokens = input_tokens + output_tokens
                 
                 _conversation_logger.log_token_usage(
@@ -172,7 +204,7 @@ async def convert_text_to_speech(content: str, tone: str):
         logger.debug("Audio stream closed")
 
 def convert_speech_to_text(file_path: str = None, audio_bytes: bytes = None) -> str:
-    logger.info(f"Converting speech to text from file_path: {file_path}")
+    logger.info(f"Converting speech to text")
     agent_config = CONFIG['speech_to_text_agent']['llm_config']
     client = genai.Client(api_key=AI_API_KEY)
 
@@ -196,14 +228,13 @@ def convert_speech_to_text(file_path: str = None, audio_bytes: bytes = None) -> 
         ]
         )
         logger.info(f"Speech-to-text conversion completed")
-        logger.debug(f"Transcribed text: {response.text[:100]}...")
-        
+        logger.info(f"Transcribed text: {response.text}...")
         # Log token usage if available
         try:
             if hasattr(response, 'usage_metadata'):
                 usage = response.usage_metadata
-                input_tokens = usage.get('input_tokens', 0)
-                output_tokens = usage.get('output_tokens', 0)
+                input_tokens = usage.prompt_tokens_details[1].token_count
+                output_tokens = usage.prompt_tokens_details[0].token_count
                 total_tokens = input_tokens + output_tokens
                 
                 _conversation_logger.log_token_usage(
@@ -218,8 +249,35 @@ def convert_speech_to_text(file_path: str = None, audio_bytes: bytes = None) -> 
         except Exception as e:
             logger.debug(f"Could not extract token usage from STT response: {e}")
         
-        print(response.text)
         return response.text
     except Exception as e:
         logger.error(f"Error during speech-to-text conversion: {e}", exc_info=True)
         raise
+
+def convert_speech_to_text_api(file_path: str = None, audio_bytes: bytes = None) -> str:
+    if file_path is not None:
+        logger.debug(f"Loading audio file: {file_path}")
+        with open(file_path, "rb") as audio_file:
+            audio_bytes = audio_file.read()
+        logger.debug(f"Loaded {len(audio_bytes)} bytes from audio file")
+
+    # Instantiates a client
+    client = SpeechClient()
+
+    config = cloud_speech.RecognitionConfig(
+        auto_decoding_config=cloud_speech.AutoDetectDecodingConfig(),
+        language_codes=["en-US", "fr-CA"],
+        model="long",
+    )
+
+    request = cloud_speech.RecognizeRequest(
+        recognizer=f"projects/{GOOGLE_CLOUD_PROJECT}/locations/global/recognizers/_",
+        config=config,
+        content=audio_bytes,
+    )
+
+    # Transcribes the audio into text
+    response = client.recognize(request=request)
+
+    for result in response.results:
+        print(f"Transcript: {result.alternatives[0].transcript}")

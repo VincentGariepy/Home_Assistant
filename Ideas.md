@@ -18,7 +18,12 @@
 
 
 ## Code
-* Test input audio with new model and token logging.
+* Improve text recognition.
+* Add simple acknowledgement.
+* Ring only once or twice and fix ringing.
+* Does not listen after ringing - have to test with voice, it works with text.
+* Have a  mode that you activate with hey jarvis, then it tries to record and answer to sentences by
+by calculating increase and decrease and volume.
 * Can we answer without Hey Jarvis ?
 * Can we text/discord to it ?
 
