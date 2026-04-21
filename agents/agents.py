@@ -1,7 +1,10 @@
+from contextlib import asynccontextmanager
 import os
+import types
 import yaml
 from datetime import date
 from retry import retry
+from typing import Literal
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import add_messages
@@ -15,6 +18,7 @@ from langgraph.func import entrypoint, task
 from langchain_core.tools import Tool
 from langchain_experimental.utilities import PythonREPL
 from langchain_google_community import GoogleSearchAPIWrapper, GoogleSearchResults
+from google import genai
 
 from tools.utils import ADDRESSES
 from tools.places_tools import get_route
@@ -24,14 +28,15 @@ from agents.agent_init_data import AgentInitData
 from agents.utils import extract_last_ai_message
 from log_config.logging_config import get_conversation_logger, logger
 
-ai_api_key = os.getenv('GOOGLE_AI_KEY')
-maps_api_key = os.getenv('GOOGLE_MAPS_KEY')
-google_cse_id = os.getenv('GOOGLE_CSE_ID')
+AI_API_KEY = os.getenv('GOOGLE_AI_KEY')
+MAPS_API_KEY = os.getenv('GOOGLE_MAPS_KEY')
+GOOGLE_CSE_ID = os.getenv('GOOGLE_CSE_ID')
 
 with open('agents/agents_config.yaml', 'r') as file:
     config = yaml.safe_load(file)
 
 _conversation_logger = get_conversation_logger()
+
 
 @retry(tries=3, backoff=2, jitter=(2, 5))
 @task
@@ -117,7 +122,7 @@ def _tool_calling_agent(agent_data: AgentInitData, messages: list[BaseMessage] |
 
 def _init_route_agent():
     route_agent_config = config['route_agent']
-    llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
+    llm = ChatGoogleGenerativeAI(google_api_key=AI_API_KEY, 
                                 model=route_agent_config['llm_config']['model_name'],
                                 temperature=route_agent_config['llm_config']['temperature'])
     tools = [get_route]
@@ -140,7 +145,7 @@ def route_agent(messages: list[BaseMessage] | str):
 
 def _init_weather_agent():
     weather_agent_config = config['weather_agent']
-    llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
+    llm = ChatGoogleGenerativeAI(google_api_key=AI_API_KEY, 
                                 model=weather_agent_config['llm_config']['model_name'],
                                 temperature=weather_agent_config['llm_config']['temperature'])
     tools = [get_current_weather, get_daily_weather, get_hourly_weather]
@@ -165,12 +170,12 @@ def weather_agent(messages: list[BaseMessage] | str):
 
 def _init_online_search_agent():
     online_search_agent_config = config['online_search_agent']
-    llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
+    llm = ChatGoogleGenerativeAI(google_api_key=AI_API_KEY, 
                                 model=online_search_agent_config['llm_config']['model_name'],
                                 temperature=online_search_agent_config['llm_config']['temperature'])
 
-    search = GoogleSearchAPIWrapper(google_api_key=maps_api_key, 
-                                    google_cse_id=google_cse_id)
+    search = GoogleSearchAPIWrapper(google_api_key=MAPS_API_KEY, 
+                                    GOOGLE_CSE_ID=GOOGLE_CSE_ID)
 
     grounding_tool = GoogleSearchResults(api_wrapper=search)
     
@@ -194,10 +199,10 @@ def online_search_agent(messages: list[BaseMessage] | str):
     return _tool_calling_agent(online_search_agent_data, messages, agent_name="online_search_agent")
 
 def _init_code_agent():
-    online_search_agent_config = config['code_agent']
-    llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
-                                model=online_search_agent_config['llm_config']['model_name'],
-                                temperature=online_search_agent_config['llm_config']['temperature'])
+    code_agent_config = config['code_agent']
+    llm = ChatGoogleGenerativeAI(google_api_key=AI_API_KEY, 
+                                model=code_agent_config['llm_config']['model_name'],
+                                temperature=code_agent_config['llm_config']['temperature'])
     
     python_repl = PythonREPL()
     # You can create the tool to pass to an agent
@@ -212,7 +217,7 @@ def _init_code_agent():
     llm_with_tools = llm.bind_tools(tools)
 
 
-    system_prompt = online_search_agent_config['prompt_config']['system_message']
+    system_prompt = code_agent_config['prompt_config']['system_message']
 
     return AgentInitData(tools_by_name=tools_by_name, 
                          llm_with_tools=llm_with_tools,
@@ -226,7 +231,7 @@ def code_agent(messages: list[BaseMessage] | str):
 
 def _init_timer_agent():
     timer_agent_config = config['timer_agent']
-    llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
+    llm = ChatGoogleGenerativeAI(google_api_key=AI_API_KEY, 
                                 model=timer_agent_config['llm_config']['model_name'],
                                 temperature=timer_agent_config['llm_config']['temperature'])
     tools = [add_timer, timer_data, convert_hours_to_seconds, convert_minutes_to_seconds]
@@ -250,7 +255,7 @@ def timer_agent(messages: list[BaseMessage] | str):
 def _init_quirky_agent(tone: str):
     quirky_agent_config = config['quirky_agent']
 
-    llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
+    llm = ChatGoogleGenerativeAI(google_api_key=AI_API_KEY, 
                                 model=quirky_agent_config['llm_config']['model_name'],
                                 temperature=quirky_agent_config['llm_config']['temperature'])
     if tone == 'sassy':
@@ -304,7 +309,7 @@ def _create_main_agent_tools():
 
 def _init_main_agent(tone: str):
     main_agent_config = config['main_agent']
-    llm = ChatGoogleGenerativeAI(google_api_key=ai_api_key, 
+    llm = ChatGoogleGenerativeAI(google_api_key=AI_API_KEY, 
                                 model=main_agent_config['llm_config']['model_name'],
                                 temperature=main_agent_config['llm_config']['temperature'])
     
@@ -335,3 +340,4 @@ def main_agent(input: dict):
     main_agent_inst = _init_main_agent(tone=tone)
     logger.info(f"Main agent called with tone: {tone}")
     return _tool_calling_agent(main_agent_inst, input["messages"], agent_name=f"main_agent_{tone}")
+

@@ -25,4 +25,4 @@ if __name__ == "__main__":
     quirky_response_interval = None if args.quirky_response_interval == -1 else args.quirky_response_interval
    
     assistant = HomeAssistant(memory_timeframe=memory_timeframe, no_audio=no_audio, quirky_response_interval=quirky_response_interval)
-    asyncio.run(assistant.main())
+    asyncio.run(assistant.main_2())

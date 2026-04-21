@@ -89,6 +89,35 @@ def _record_user_request(stream):
     buffer.seek(0)
     return buffer
 
+def get_wake_word():
+    with ignore_alsa_warnings():
+        oww_model = Model(wakeword_model_paths=WAKE_WORDS)
+        pa = pyaudio.PyAudio()
+
+    stream = pa.open(format=pyaudio.paInt16, channels=CHANNELS, rate=RATE,
+                    input=True, frames_per_buffer=CHUNK, input_device_index=_get_input_device_index(pa))
+
+    logger.info(f"System Online. Monitoring for: {[os.path.basename(path)[0:-5] for path in WAKE_WORDS]}")
+
+    try:
+        while True:
+            data = stream.read(CHUNK, exception_on_overflow=False)
+            audio_numpy = np.frombuffer(data, dtype=np.int16)
+
+            prediction = oww_model.predict(audio_numpy)
+            wake_word = max(prediction.items(), key=lambda x: x[1])[0]
+
+            if prediction[wake_word] > 0.5:
+                logger.info(f"\nTrigger Detected: {wake_word} (Score: {prediction[wake_word]:.2f})")
+                return wake_word
+                    
+    except KeyboardInterrupt:
+        logger.info("\nShutting down...")
+    finally:
+        stream.stop_stream()
+        stream.close()
+        pa.terminate()
+
 def get_user_request():
     # Initialize openWakeWord with multiple models
     with ignore_alsa_warnings():

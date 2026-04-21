@@ -13,7 +13,6 @@ def get_current_weather(address_string: str = 'home_address') -> dict:
     Get current weather conditions for a given address using Weather API.
 
     Args:
-        maps_key (str): Google Maps API key.
         address_string (str): The address to look up, can be a full address, city or business name.
 
     Returns:    

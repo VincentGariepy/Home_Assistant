@@ -6,14 +6,24 @@ from langchain_core.messages import (
     HumanMessage,
     AIMessage,
 )
+import pyaudio
 
-from audio_functions.genai_audio_utils import convert_text_to_speech, convert_speech_to_text
-from audio_functions.audio_listening import get_user_request
+from audio_functions.genai_audio_utils import convert_text_to_speech, convert_speech_to_text, ignore_alsa_warnings, setup_audio_stream, FORMAT, CHANNELS, RATE
+from audio_functions.audio_listening import CHUNK, _get_input_device_index, get_user_request, get_wake_word
 from agents.agents import main_agent, quirky_agent
+from agents.live_agent import live_main_agent
 from agents.utils import async_resilient
 from tools.timer_tool import check_timers
 from log_config.logging_config import get_conversation_logger, logger
 from log_config.log_analyzer import send_monthly_email_report
+
+WAKE_WORD_MAPPING = {
+    'hey_jarvis_v0.1': 'neutral',
+    'heille_la_pute': 'sassy',
+    'hey_babe': 'sassy',
+    'oi_mate': 'scottish',
+    'jarjar': 'jarjar'
+}
 
 class HomeAssistant():
     def __init__(self, memory_timeframe: int = 5, no_audio: bool = False, quirky_response_interval: Literal[None, 3, 5, 10, 15] = 10):
@@ -82,7 +92,37 @@ class HomeAssistant():
         finally:
             timer_task.cancel()
         
+    async def main_2(self):
+        # Start the background timer check task
+        timer_task = asyncio.create_task(self._check_timers_periodically())
+        
+        try:
+            while True:
+                send_monthly_email_report()  # Check if it's time to send the monthly report
+                try:
+                    if self.no_audio:
+                        wake_word = "hey_jarvis_v0.1"
+                        # Run blocking input in a thread so event loop can continue
+                        user_request_text = await asyncio.to_thread(input, "Type your request: ")
+                        logger.info(f"User text request received with wake_word: {wake_word}")
+                        logger.debug(f"User text input: {user_request_text}")
+                    else:
+                        # Run blocking listen in a thread so event loop can continue
+                        wake_word = await asyncio.to_thread(self.listen_for_wake_word)
+                        logger.info(f"User request received with wake_word: {wake_word}")
 
+                    await live_main_agent(tone=WAKE_WORD_MAPPING.get(wake_word, 'neutral'))
+                
+                except Exception as e:
+                    logger.error(f"Error in main loop: {e}", exc_info=True)
+                    self.conversation_logger.log_error(
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                        context={"conversation_id": self.conversation_id}
+                    )
+        finally:
+            timer_task.cancel()        
+        
     @async_resilient(retries=2, timeout=120)
     async def get_answer(self, message: str,
                          tone: Literal['neutral', 'sassy', 'scottish', 'jarjar'] = 'neutral'):
@@ -171,3 +211,7 @@ class HomeAssistant():
     
     def listen_for_user_request(self) -> tuple:
         return get_user_request()
+    
+    def listen_for_wake_word(self) -> str:
+        wake_word = get_wake_word()
+        return wake_word

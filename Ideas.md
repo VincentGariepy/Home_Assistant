@@ -18,6 +18,7 @@
 
 
 ## Code
+* Test 2.5 live with non blocking tool calls and selective answering
 * Improve text recognition.
 * Add simple acknowledgement.
 * Ring only once or twice and fix ringing.
