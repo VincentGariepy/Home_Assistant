@@ -48,6 +48,84 @@ AGENT_TOOLS_MAP = {
     "timer_agent_tool": timer_agent,
 }
 
+# Tool definitions for Gemini Live API
+GEMINI_TOOL_DEFINITIONS = [
+    types.Tool(
+        function_declarations=[
+            types.FunctionDeclaration(
+                name="route_agent_tool",
+                description="An agent capable of performing Google maps queries to get the route to certain places.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "input": {
+                            "type": "string",
+                            "description": "The user's query about routes, navigation, traffic, or directions"
+                        }
+                    },
+                    "required": ["input"]
+                }
+            ),
+            types.FunctionDeclaration(
+                name="weather_agent_tool",
+                description="An agent capable of performing weather queries to get the current, daily, and hourly weather.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "input": {
+                            "type": "string",
+                            "description": "The user's query about current, daily, or hourly weather"
+                        }
+                    },
+                    "required": ["input"]
+                }
+            ),
+            types.FunctionDeclaration(
+                name="online_search_agent_tool",
+                description="An agent capable of performing online searches to get accurate, relevant and timely information.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "input": {
+                            "type": "string",
+                            "description": "The user's query for information search"
+                        }
+                    },
+                    "required": ["input"]
+                }
+            ),
+            types.FunctionDeclaration(
+                name="code_agent_tool",
+                description="An agent capable of answering queries that are best answered by code execution.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "input": {
+                            "type": "string",
+                            "description": "The user's query that requires code execution to answer"
+                        }
+                    },
+                    "required": ["input"]
+                }
+            ),
+            types.FunctionDeclaration(
+                name="timer_agent_tool",
+                description="An agent capable of setting timers, listing timers and deleting timers.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "input": {
+                            "type": "string",
+                            "description": "The user's query about managing timers"
+                        }
+                    },
+                    "required": ["input"]
+                }
+            ),
+        ]
+    )
+]
+
 @asynccontextmanager
 async def _live_main_agent_setup(tone: Literal["neutral", "sassy", "scottish", "jarjar"] = "neutral", response_mode: Literal["TEXT", "AUDIO"] = "TEXT"):
     with open('agents/agents_config.yaml', 'r') as file:
@@ -71,7 +149,7 @@ async def _live_main_agent_setup(tone: Literal["neutral", "sassy", "scottish", "
         ),
         temperature=live_agent_config['llm_config']['temperature'],
         response_modalities=["AUDIO"],
-        tools=[tool for name, tool in AGENT_TOOLS_MAP.items()],
+        tools=GEMINI_TOOL_DEFINITIONS,
         input_audio_transcription={},
         output_audio_transcription={}
     )
@@ -91,7 +169,6 @@ async def receive_responses(session, output_stream):
 
             # Handle tool calls first
             if response and response.tool_call:
-                print(response.tool_call)
                 function_responses = []
                 
                 for function_call in response.tool_call.function_calls:
@@ -104,14 +181,14 @@ async def receive_responses(session, output_stream):
                         
                         # 3. Execute the LangChain agent
                         # Note: LangChain's invoke is usually synchronous unless using ainvoke
-                        result = agent.invoke({"input": tool_input})
+                        result = agent.invoke(input = [HumanMessage(content=tool_input)])
                         
                         # 4. Format for Gemini
                         function_responses.append(
-                            types.LiveClientToolResponse(
+                            types.FunctionResponse(
                                 name=function_call.name,
                                 id=function_call.id,
-                                response={"result": str(result)}
+                                response={"result": str(result[-1].content[-1]['text'])}
                             )
                         )
 
