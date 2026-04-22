@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 import os
+import time
 from jupyter_client import session
 import pyaudio
 import yaml
@@ -122,9 +123,16 @@ GEMINI_TOOL_DEFINITIONS = [
                     "required": ["input"]
                 }
             ),
+            types.FunctionDeclaration(
+                name="end_chat_tool",
+            ),
         ]
     )
 ]
+
+class EndSession(Exception):
+    """Custom exception to trigger shutdown"""
+    pass
 
 @asynccontextmanager
 async def _live_main_agent_setup(tone: Literal["neutral", "sassy", "scottish", "jarjar"] = "neutral", response_mode: Literal["TEXT", "AUDIO"] = "TEXT"):
@@ -157,58 +165,62 @@ async def _live_main_agent_setup(tone: Literal["neutral", "sassy", "scottish", "
     async with client.aio.live.connect(model=model, config=config) as session:
         yield session
 
-async def receive_responses(session, output_stream):
+async def receive_responses(session, output_stream, shared_state):
     text_input = ""
     text_output = ""
-    while True:
-        async for response in session.receive():
-            if response and response.server_content and response.server_content.output_transcription:
-                text_output += response.server_content.output_transcription.text
-            if response and response.server_content and response.server_content.input_transcription:
-                text_input += response.server_content.input_transcription.text
+    try:
+        while True:
+            async for response in session.receive():
+                if response and response.server_content and response.server_content.output_transcription:
+                    text_output += response.server_content.output_transcription.text
+                if response and response.server_content and response.server_content.input_transcription:
+                    text_input += response.server_content.input_transcription.text
 
-            # Handle tool calls first
-            if response and response.tool_call:
-                function_responses = []
-                
-                for function_call in response.tool_call.function_calls:
-                    # 1. Get the agent from our map
-                    agent = AGENT_TOOLS_MAP.get(function_call.name)
+                # Handle tool calls first
+                if response and response.tool_call:
+                    function_responses = []
                     
-                    if agent:
-                        # 2. Extract the 'input' argument Gemini generated
-                        tool_input = function_call.args.get("input")
+                    for function_call in response.tool_call.function_calls:
+                        if function_call.name == "end_chat_tool":
+                            logger.info("End chat tool called. Ending session.")
+                            await session.close()
+                            raise EndSession()
                         
-                        # 3. Execute the LangChain agent
-                        # Note: LangChain's invoke is usually synchronous unless using ainvoke
-                        result = agent.invoke(input = [HumanMessage(content=tool_input)])
+                        agent = AGENT_TOOLS_MAP.get(function_call.name)
                         
-                        # 4. Format for Gemini
-                        function_responses.append(
-                            types.FunctionResponse(
-                                name=function_call.name,
-                                id=function_call.id,
-                                response={"result": str(result[-1].content[-1]['text'])}
+                        if agent:
+                            tool_input = function_call.args.get("input")
+                            result = agent.invoke(input = [HumanMessage(content=tool_input)])
+                            
+                            function_responses.append(
+                                types.FunctionResponse(
+                                    name=function_call.name,
+                                    id=function_call.id,
+                                    response={"result": str(result[-1].content[-1]['text'])}
+                                )
                             )
-                        )
 
-                # 5. Send results back so Gemini can continue speaking
-                await session.send_tool_response(function_responses=function_responses)
-            
-            # Then handle the generated response (text or audio)
-            if response and response.server_content and response.server_content.model_turn:
-                for part in response.server_content.model_turn.parts:
-                    if part.inline_data:
-                        output_stream.write(part.inline_data.data)
-            
-            # Print completion info when turn is complete
-            if response and response.server_content and response.server_content.turn_complete:
-                print("Turn complete.")
-                print(f"Full text input for this turn: {text_input}")
-                print(f"Full text output for this turn: {text_output}")
-                # Reset for next turn
-                text_input = ""
-                text_output = ""
+                    # 5. Send results back so Gemini can continue speaking
+                    await session.send_tool_response(function_responses=function_responses)
+                
+                # Then handle the generated response (text or audio)
+                if response and response.server_content and response.server_content.model_turn:
+                    for part in response.server_content.model_turn.parts:
+                        if part.inline_data:
+                            output_stream.write(part.inline_data.data)
+                
+                # Print completion info when turn is complete
+                if response and response.server_content and response.server_content.turn_complete:
+                    print("Turn complete.")
+                    print(f"Full text input for this turn: {text_input}")
+                    print(f"Full text output for this turn: {text_output}")
+                    shared_state['last_ping'] = time.time()  # Update last ping time at the end of the turn
+                    # Reset for next turn
+                    text_input = ""
+                    text_output = ""
+    except Exception as e:
+        # Handle session closure (ConnectionClosedOK or other websocket errors)
+        logger.debug(f"receive_responses ended: {e}")
 
 async def stream_mic(session, input_stream):
     print("Microphone active. Talk whenever you're ready.")
@@ -228,28 +240,55 @@ async def stream_mic(session, input_stream):
 
 async def listen_text(session):
     print("Console chat active. Type your message and press Enter.")
+    loop = asyncio.get_event_loop()
     while True:
         # Run the blocking input() in a thread so it doesn't freeze audio
-        text_input = await asyncio.to_thread(input, "User: ")
+        text_input = await loop.run_in_executor(None, input, "User: ")
             
         if text_input.strip():
             # Send the text to the Gemini session
             logger.info(f"Sending text input to Gemini: {text_input}")
             await session.send_realtime_input(text=text_input)
 
-async def live_main_agent(tone: Literal["neutral", "sassy", "scottish", "jarjar"] = "neutral", response_mode: Literal["TEXT", "AUDIO"] = "TEXT"):
-    async with _live_main_agent_setup(tone=tone, response_mode=response_mode) as session:
-        output_stream, p = setup_audio_stream(FORMAT, CHANNELS, RATE)
+async def limit_time(session, session_time_limit_seconds, shared_state):
+    while True:
+        await asyncio.sleep(int(session_time_limit_seconds/10))  # Check more frequently than the limit
+        exit_time = shared_state['last_ping'] + session_time_limit_seconds
+        if time.time() >= exit_time:
+            logger.info("Session inactive time limit reached. Closing session.")
+            await session.close()
+            raise EndSession()
 
-        with ignore_alsa_warnings():
-            pa = pyaudio.PyAudio()
 
-        input_stream = pa.open(format=pyaudio.paInt16, channels=CHANNELS, rate=RATE,
-                        input=True, frames_per_buffer=CHUNK, input_device_index=_get_input_device_index(pa))
+async def live_main_agent(tone: Literal["neutral", "sassy", "scottish", "jarjar"] = "neutral", 
+                          response_mode: Literal["TEXT", "AUDIO"] = "TEXT", 
+                          session_time_limit_seconds: int = 300):
+    try:
+        async with _live_main_agent_setup(tone=tone, response_mode=response_mode) as session:
+            output_stream, p = setup_audio_stream(FORMAT, CHANNELS, RATE)
 
-        # Send initial greeting and signal end of input
-        await session.send_realtime_input(text="Hello !")
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(receive_responses(session, output_stream))
-            # tg.create_task(stream_mic(session, input_stream))
-            tg.create_task(listen_text(session))
+            with ignore_alsa_warnings():
+                pa = pyaudio.PyAudio()
+
+            input_stream = pa.open(format=pyaudio.paInt16, channels=CHANNELS, rate=RATE,
+                            input=True, frames_per_buffer=CHUNK, input_device_index=_get_input_device_index(pa))
+            
+            shared_state = {"last_ping": time.time()}
+
+            # Send initial greeting and signal end of input
+            await session.send_realtime_input(text="Hello !")
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(receive_responses(session, output_stream, shared_state))
+                # tg.create_task(stream_mic(session, input_stream))
+                tg.create_task(listen_text(session))
+                tg.create_task(limit_time(session, session_time_limit_seconds, shared_state))
+    except* EndSession:
+        logger.info("Session ended.")
+    finally:
+        logger.info("Cleaning up audio streams.")
+        output_stream.stop_stream()
+        output_stream.close()
+        p.terminate()
+        input_stream.stop_stream()
+        input_stream.close()
+
