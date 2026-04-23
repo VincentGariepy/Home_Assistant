@@ -1,6 +1,4 @@
 import os
-import io
-import wave
 import numpy as np
 import pyaudio
 import openwakeword
@@ -46,49 +44,6 @@ def _get_input_device_index(p):
     # If we found a specific USB device, use it. Otherwise, let PyAudio choose default.
     return target_index
 
-def _record_user_request(stream):
-    """Records audio after wake word until silence."""
-    logger.info("Listening for request...")
-    frames = []
-    prev_volume = 0
-    silence_threshold = 0.5
-    silent_chunks = 0
-    max_silence = 40 # ~2 seconds of silence (20 * 0.1s chunks)
-    min_frames = 20  # Ensure at least 2 seconds of recording before detecting silence
-
-    while True:
-        data = stream.read(CHUNK, exception_on_overflow=False)
-        frames.append(data)
-        
-        # Simple volume check for silence detection
-        audio_data = np.frombuffer(data, dtype=np.int16)
-        volume = np.abs(audio_data).max()
-        
-        if prev_volume == 0:
-            prev_volume = volume
-            silent_chunks = 0
-        elif volume * silence_threshold < prev_volume < volume * 1/silence_threshold:
-            silent_chunks += 1
-            prev_volume = volume
-        else:   
-            silent_chunks = 0
-            prev_volume = volume
-
-        # Only exit if we have enough data AND detected silence
-        if len(frames) > min_frames and silent_chunks > max_silence:
-            logger.info("Request recorded.")
-            break
-            
-    # Wrap in RAM as a WAV file
-    buffer = io.BytesIO()
-    with wave.open(buffer, 'wb') as wf:
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(2)
-        wf.setframerate(RATE)
-        wf.writeframes(b''.join(frames))
-    buffer.seek(0)
-    return buffer
-
 def get_wake_word():
     with ignore_alsa_warnings():
         oww_model = Model(wakeword_model_paths=WAKE_WORDS)
@@ -117,42 +72,3 @@ def get_wake_word():
         stream.stop_stream()
         stream.close()
         pa.terminate()
-
-def get_user_request():
-    # Initialize openWakeWord with multiple models
-    with ignore_alsa_warnings():
-        oww_model = Model(wakeword_model_paths=WAKE_WORDS)
-        pa = pyaudio.PyAudio()
-
-    stream = pa.open(format=pyaudio.paInt16, channels=CHANNELS, rate=RATE,
-                    input=True, frames_per_buffer=CHUNK, input_device_index=_get_input_device_index(pa))
-
-    logger.info(f"System Online. Monitoring for: {[os.path.basename(path)[0:-5] for path in WAKE_WORDS]}")
-
-    try:
-        while True:
-            # Read mic data
-            data = stream.read(CHUNK, exception_on_overflow=False)
-            audio_numpy = np.frombuffer(data, dtype=np.int16)
-
-            # Process with openWakeWord
-            # Returns a dict: {'wakeword_name': confidence_score}
-            prediction = oww_model.predict(audio_numpy)
-            
-            wake_word = max(prediction.items(), key=lambda x: x[1])[0]
-
-            for word, score in prediction.items():
-                if score > 0.5:  # Threshold for detection
-                    logger.info(f"\nTrigger Detected: {word} (Score: {score:.2f})")
-                    
-                    # Record the follow-up request
-                    audio_file = _record_user_request(stream)
-                    return audio_file, wake_word
-                    
-    except KeyboardInterrupt:
-        logger.info("\nShutting down...")
-    finally:
-        stream.stop_stream()
-        stream.close()
-        pa.terminate()
-        

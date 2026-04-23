@@ -2,39 +2,23 @@ import asyncio
 from contextlib import asynccontextmanager
 import os
 import time
-from jupyter_client import session
 import pyaudio
 from websockets import ConnectionClosedOK
 import yaml
 from datetime import date
-from retry import retry
 from typing import Literal
 import aioconsole
 
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langgraph.graph import add_messages
 from langchain_core.messages import (
-    SystemMessage,
     HumanMessage,
-    BaseMessage,
-    ToolCall,
 )
-from langgraph.func import entrypoint, task
-from langchain_core.tools import Tool
-from langchain_experimental.utilities import PythonREPL
-from langchain_google_community import GoogleSearchAPIWrapper, GoogleSearchResults
 from google import genai
 from google.genai import types
 
 from audio_functions.audio_listening import _get_input_device_index
-from test import send_text_input
 from tools.utils import ADDRESSES
-from tools.places_tools import get_route
-from tools.weather_tools import get_current_weather, get_daily_weather, get_hourly_weather
-from tools.timer_tool import add_timer, timer_data, convert_hours_to_seconds, convert_minutes_to_seconds
 from agents.agents import route_agent, weather_agent, online_search_agent, code_agent, timer_agent
 from audio_functions.genai_audio_utils import ignore_alsa_warnings, setup_audio_stream, FORMAT, CHANNELS, RATE, CHUNK
-from agents.utils import extract_last_ai_message
 from log_config.logging_config import get_conversation_logger, logger
 
 AI_API_KEY = os.getenv('GOOGLE_AI_KEY')

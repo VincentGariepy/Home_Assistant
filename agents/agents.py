@@ -1,10 +1,7 @@
-from contextlib import asynccontextmanager
 import os
-import types
 import yaml
 from datetime import date
 from retry import retry
-from typing import Literal
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import add_messages
@@ -251,93 +248,3 @@ def timer_agent(messages: list[BaseMessage] | str):
     timer_agent_data = _init_timer_agent()
     logger.info("Timer agent called")
     return _tool_calling_agent(timer_agent_data, messages, agent_name="timer_agent")
-
-def _init_quirky_agent(tone: str):
-    quirky_agent_config = config['quirky_agent']
-
-    llm = ChatGoogleGenerativeAI(google_api_key=AI_API_KEY, 
-                                model=quirky_agent_config['llm_config']['model_name'],
-                                temperature=quirky_agent_config['llm_config']['temperature'])
-    if tone == 'sassy':
-        system_prompt = quirky_agent_config['prompt_config']['system_message_sassy']
-    elif tone == 'scottish':
-        system_prompt = quirky_agent_config['prompt_config']['system_message_scottish']
-    else:
-        system_prompt = quirky_agent_config['prompt_config']['system_message_neutral']
-
-    return AgentInitData(tools_by_name={}, 
-                         llm_with_tools=llm,
-                         system_prompt=system_prompt)
-
-@entrypoint()
-def quirky_agent(input: dict):
-    quirky_agent_data = _init_quirky_agent(input['tone'])
-
-    return _tool_calling_agent(quirky_agent_data, input['messages'], agent_name=f"quirky_agent_{input['tone']}")
-
-def _create_main_agent_tools():
-    route_agent_tool = Tool(
-        name="route_agent_tool",
-        description="A tool for getting driving route information. Takes a prompt as input.",
-        func=route_agent.invoke,
-    )
-
-    weather_agent_tool = Tool(
-        name="weather_agent_tool",
-        description="A tool for getting weather information. Takes a prompt as input.",
-        func=weather_agent.invoke,
-    )
-
-    online_search_agent_tool = Tool(
-        name="online_search_agent_tool",
-        description="A tool for getting online search information. Takes a prompt as input.",
-        func=online_search_agent.invoke,
-    )
-
-    code_agent_tool = Tool(
-        name="code_agent_tool",
-        description="A tool for getting code execution information. Takes a prompt as input.",
-        func=code_agent.invoke,
-    )
-    timer_agent_tool = Tool(
-        name="timer_agent_tool",
-        description="A tool for managing timers. Takes a prompt as input.",
-        func=timer_agent.invoke,
-    )
-
-    return [route_agent_tool, weather_agent_tool, online_search_agent_tool, code_agent_tool, timer_agent_tool]
-
-def _init_main_agent(tone: str):
-    main_agent_config = config['main_agent']
-    llm = ChatGoogleGenerativeAI(google_api_key=AI_API_KEY, 
-                                model=main_agent_config['llm_config']['model_name'],
-                                temperature=main_agent_config['llm_config']['temperature'])
-    
-    tools = _create_main_agent_tools()
-
-    tools_by_name = {tool.name: tool for tool in tools}
-    llm_with_tools = llm.bind_tools(tools)
-
-    if tone == 'sassy':
-        system_prompt = main_agent_config['prompt_config']['system_message_sassy']
-    elif tone == 'scottish':
-        system_prompt = main_agent_config['prompt_config']['system_message_scottish']
-    elif tone == 'jarjar':
-        system_prompt = main_agent_config['prompt_config']['system_message_jarjar']
-    else:
-        system_prompt = main_agent_config['prompt_config']['system_message_neutral']
-
-    system_prompt = system_prompt.format(list(tools_by_name.keys()),
-                                    date.today().strftime('%Y-%m-%d'))
-
-    return AgentInitData(tools_by_name=tools_by_name, 
-                         llm_with_tools=llm_with_tools,
-                         system_prompt=system_prompt)
-
-@entrypoint()
-def main_agent(input: dict):
-    tone = input.get("tone", "neutral")
-    main_agent_inst = _init_main_agent(tone=tone)
-    logger.info(f"Main agent called with tone: {tone}")
-    return _tool_calling_agent(main_agent_inst, input["messages"], agent_name=f"main_agent_{tone}")
-
