@@ -4,10 +4,12 @@ import os
 import time
 from jupyter_client import session
 import pyaudio
+from websockets import ConnectionClosedOK
 import yaml
 from datetime import date
 from retry import retry
 from typing import Literal
+import aioconsole
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import add_messages
@@ -218,7 +220,7 @@ async def receive_responses(session, output_stream, shared_state):
                     # Reset for next turn
                     text_input = ""
                     text_output = ""
-    except Exception as e:
+    except ConnectionClosedOK as e:
         # Handle session closure (ConnectionClosedOK or other websocket errors)
         logger.debug(f"receive_responses ended: {e}")
 
@@ -241,14 +243,22 @@ async def stream_mic(session, input_stream):
 async def listen_text(session):
     print("Console chat active. Type your message and press Enter.")
     loop = asyncio.get_event_loop()
+    
     while True:
-        # Run the blocking input() in a thread so it doesn't freeze audio
-        text_input = await loop.run_in_executor(None, input, "User: ")
+        try:
+            text_input = await aioconsole.ainput("User : ")
             
-        if text_input.strip():
-            # Send the text to the Gemini session
-            logger.info(f"Sending text input to Gemini: {text_input}")
-            await session.send_realtime_input(text=text_input)
+            if text_input and text_input.strip():
+                # Send the text to the Gemini session
+                logger.info(f"Sending text input to Gemini: {text_input}")
+                await session.send_realtime_input(text=text_input)
+        except asyncio.TimeoutError:
+            # Timeout occurs frequently to allow checking session_active flag
+            continue
+        except asyncio.CancelledError:
+            # Task was cancelled (session ended)
+            break
+    logger.info("Text listener ending due to session inactivity.")
 
 async def limit_time(session, session_time_limit_seconds, shared_state):
     while True:
@@ -291,4 +301,3 @@ async def live_main_agent(tone: Literal["neutral", "sassy", "scottish", "jarjar"
         p.terminate()
         input_stream.stop_stream()
         input_stream.close()
-

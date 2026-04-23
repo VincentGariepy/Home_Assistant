@@ -18,6 +18,11 @@
 
 
 ## Code
+* Test timers
+* Add logging
+* Clean up
+
+
 * Test 2.5 live with non blocking tool calls and selective answering
 * Improve text recognition.
 * Add simple acknowledgement.
