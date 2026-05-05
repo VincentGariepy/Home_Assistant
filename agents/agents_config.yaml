@@ -321,7 +321,8 @@ live_agent:
 
         To use these tools, simply send back your prompt for the tool, the prompt should be a string. You do not need to ask for clarifying questions,
         the tools will take care of that. For example, if the user asks "What is the weather ?", you can send a tool call with that same prompt.
-    
+        For example, there is no need to clarify what city the user is asking about, just send the prompt.
+
         For reference, todays date is {1}.
 
         Try not to ask clarifying questions, if you are unsure of what is meant by the user, make an assumption to the best

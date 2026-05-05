@@ -145,18 +145,31 @@ async def _live_main_agent_setup(tone: Literal["neutral", "sassy", "scottish", "
         response_modalities=["AUDIO"],
         tools=GEMINI_TOOL_DEFINITIONS,
         input_audio_transcription={},
-        output_audio_transcription={}
+        output_audio_transcription={},
+        thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)
     )
 
     async with client.aio.live.connect(model=model, config=config) as session:
-        yield session
+        yield session, model
 
-async def receive_responses(session, output_stream, shared_state):
+async def receive_responses(session, output_stream, shared_state, tone, model_name):
     text_input = ""
     text_output = ""
+    input_tokens_text = 0
+    input_tokens_audio = 0
+    output_tokens_audio = 0
+    thinking_tokens = 0
+
     try:
         while True:
             async for response in session.receive():
+                if response and response.usage_metadata and response.usage_metadata.prompt_token_count:
+                    input_tokens_text += response.usage_metadata.prompt_tokens_details[0].token_count
+                    input_tokens_audio += response.usage_metadata.prompt_tokens_details[1].token_count
+                if response and response.usage_metadata and response.usage_metadata.response_token_count:
+                    output_tokens_audio += response.usage_metadata.response_token_count
+                    thinking_tokens += response.usage_metadata.thoughts_token_count if response.usage_metadata.thoughts_token_count else 0
+
                 if response and response.server_content and response.server_content.output_transcription:
                     text_output += response.server_content.output_transcription.text
                 if response and response.server_content and response.server_content.input_transcription:
@@ -198,8 +211,11 @@ async def receive_responses(session, output_stream, shared_state):
                 # Print completion info when turn is complete
                 if response and response.server_content and response.server_content.turn_complete:
                     print("Turn complete.")
-                    print(f"Full text input for this turn: {text_input}")
-                    print(f"Full text output for this turn: {text_output}")
+                    print(f"Agent text response : {text_output}")
+
+                    _conversation_logger.log_conversation(text_input, text_output, None, tone) 
+                    _conversation_logger.log_token_usage('Live Agent Text', input_tokens_text, 0, thinking_tokens, input_tokens_text + thinking_tokens, model_name)
+                    _conversation_logger.log_token_usage('Live Agent Audio', input_tokens_audio, output_tokens_audio, 0, input_tokens_audio + output_tokens_audio, model_name)
                     shared_state['last_ping'] = time.time()  # Update last ping time at the end of the turn
                     # Reset for next turn
                     text_input = ""
@@ -225,9 +241,7 @@ async def stream_mic(session, input_stream):
             break
 
 async def listen_text(session):
-    print("Console chat active. Type your message and press Enter.")
-    loop = asyncio.get_event_loop()
-    
+    print("Console chat active. Type your message and press Enter.")    
     while True:
         try:
             text_input = await aioconsole.ainput("User : ")
@@ -235,10 +249,8 @@ async def listen_text(session):
             if text_input and text_input.strip():
                 # Send the text to the Gemini session
                 logger.info(f"Sending text input to Gemini: {text_input}")
+                _conversation_logger.log_conversation(text_input, "", "text_input", "")
                 await session.send_realtime_input(text=text_input)
-        except asyncio.TimeoutError:
-            # Timeout occurs frequently to allow checking session_active flag
-            continue
         except asyncio.CancelledError:
             # Task was cancelled (session ended)
             break
@@ -258,7 +270,7 @@ async def live_main_agent(tone: Literal["neutral", "sassy", "scottish", "jarjar"
                           response_mode: Literal["TEXT", "AUDIO"] = "TEXT", 
                           session_time_limit_seconds: int = 300):
     try:
-        async with _live_main_agent_setup(tone=tone, response_mode=response_mode) as session:
+        async with _live_main_agent_setup(tone=tone, response_mode=response_mode) as (session, model_name):
             output_stream, p = setup_audio_stream(FORMAT, CHANNELS, RATE)
 
             with ignore_alsa_warnings():
@@ -272,9 +284,11 @@ async def live_main_agent(tone: Literal["neutral", "sassy", "scottish", "jarjar"
             # Send initial greeting and signal end of input
             await session.send_realtime_input(text="Hello !")
             async with asyncio.TaskGroup() as tg:
-                tg.create_task(receive_responses(session, output_stream, shared_state))
-                # tg.create_task(stream_mic(session, input_stream))
-                tg.create_task(listen_text(session))
+                tg.create_task(receive_responses(session, output_stream, shared_state, tone, model_name))
+                if response_mode == "AUDIO":
+                    tg.create_task(stream_mic(session, input_stream))
+                elif response_mode == "TEXT":
+                    tg.create_task(listen_text(session))
                 tg.create_task(limit_time(session, session_time_limit_seconds, shared_state))
     except* EndSession:
         logger.info("Session ended.")

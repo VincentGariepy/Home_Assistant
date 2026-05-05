@@ -21,13 +21,9 @@ WAKE_WORD_MAPPING = {
 }
 
 class HomeAssistant():
-    def __init__(self, memory_timeframe: int = 5, no_audio: bool = False, quirky_response_interval: Literal[None, 3, 5, 10, 15] = 10):
-        self.conversation_history = []
+    def __init__(self, memory_timeframe: int = 300, no_audio: bool = False):
         self.memory_timeframe = memory_timeframe
-        self.end_memory = datetime.today() + timedelta(minutes=memory_timeframe)
-        self.quirky_responses = []
         self.no_audio = no_audio
-        self.quirky_response_interval = quirky_response_interval
         self.conversation_logger = get_conversation_logger()
         self.conversation_id = str(uuid.uuid4())
         logger.info(f"HomeAssistant initialized with conversation_id: {self.conversation_id}")
@@ -56,18 +52,23 @@ class HomeAssistant():
             while True:
                 send_monthly_email_report()  # Check if it's time to send the monthly report
                 try:
+                    response_mode = "AUDIO" if not self.no_audio else "TEXT"
                     if self.no_audio:
                         wake_word = "hey_jarvis_v0.1"
                         # Run blocking input in a thread so event loop can continue
-                        user_request_text = await aioconsole.ainput("Type your request : ")
+                        user_input = await aioconsole.ainput("Press Enter to chat (or 'q' to quit): ")
+                        if user_input.strip().lower() == 'q':
+                            logger.info("Exiting Home Assistant.")
+                            break
                         logger.info(f"User text request received with wake_word: {wake_word}")
-                        logger.debug(f"User text input: {user_request_text}")
                     else:
                         # Run blocking listen in a thread so event loop can continue
                         wake_word = await asyncio.to_thread(self.listen_for_wake_word)
                         logger.info(f"User request received with wake_word: {wake_word}")
 
-                    await live_main_agent(tone=WAKE_WORD_MAPPING.get(wake_word, 'neutral'))
+                    await live_main_agent(tone=WAKE_WORD_MAPPING.get(wake_word, 'neutral'), 
+                                          response_mode=response_mode, 
+                                          session_time_limit_seconds=self.memory_timeframe)
                 
                 except Exception as e:
                     logger.error(f"Error in main loop: {e}", exc_info=True)

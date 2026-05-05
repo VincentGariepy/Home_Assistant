@@ -246,9 +246,9 @@ def show_token_usage_stats(date_filter: tuple[str, str] = None, dev: bool = Fals
         stats = stats_by_agent[agent]
         output_manager.write(f"{agent}:")
         output_manager.write(f"  Calls: {stats['calls']}")
-        output_manager.write(f"  In: {stats['input_tokens']:<6} Out: {stats['output_tokens']}")
+        output_manager.write(f"  In: {stats['input_tokens']:<4} Out: {stats['output_tokens']}")
         output_manager.write(f"  Total: {stats['total_tokens']}")
-        output_manager.write(f"  Cost: {stats['input_cost']:.6f}$ (in) + {stats['output_cost']:.6f}$ (out) = {stats['input_cost'] + stats['output_cost']:.6f}$")
+        output_manager.write(f"  Cost: {stats['input_cost']:.4f}$ (in) + {stats['output_cost']:.4f}$ (out) = {stats['input_cost'] + stats['output_cost']:.4f}$")
         
         total_calls += stats['calls']
         total_input += stats['input_tokens']
@@ -263,19 +263,19 @@ def show_token_usage_stats(date_filter: tuple[str, str] = None, dev: bool = Fals
         stats = stats_by_model[model]
         output_manager.write(f"{model}:")
         output_manager.write(f"  Calls: {stats['calls']}")
-        output_manager.write(f"  In: {stats['input_tokens']:<6} Out: {stats['output_tokens']}")
+        output_manager.write(f"  In: {stats['input_tokens']:<4} Out: {stats['output_tokens']}")
         output_manager.write(f"  Total: {stats['total_tokens']}")
-        output_manager.write(f"  Cost: {stats['input_cost']:.6f}$ (in) + {stats['output_cost']:.6f}$ (out) = {stats['input_cost'] + stats['output_cost']:.6f}$")
+        output_manager.write(f"  Cost: {stats['input_cost']:.4f}$ (in) + {stats['output_cost']:.4f}$ (out) = {stats['input_cost'] + stats['output_cost']:.4f}$")
 
         if stats['audio_calls'] > 0:
              output_manager.write(f"  Audio Calls: {stats['audio_calls']}")
-             output_manager.write(f"  Audio In: {stats['audio_input_tokens']:<6} Out: {stats['audio_output_tokens']}")
+             output_manager.write(f"  Audio In: {stats['audio_input_tokens']:<4} Out: {stats['audio_output_tokens']}")
              output_manager.write(f"  Audio Total: {stats['audio_total_tokens']}")
-             output_manager.write(f"  Audio Cost: {stats['audio_input_cost']:.6f}$ (in) + {stats['audio_output_cost']:.6f}$ (out) = {stats['audio_input_cost'] + stats['audio_output_cost']:.6f}$")        
+             output_manager.write(f"  Audio Cost: {stats['audio_input_cost']:.4f}$ (in) + {stats['audio_output_cost']:.4f}$ (out) = {stats['audio_input_cost'] + stats['audio_output_cost']:.4f}$")        
 
     output_manager.write("-" * 50)
     output_manager.write(f"Total: {total_input:,} (in) + {total_output:,} (out) = {total_tokens:,} tokens")
-    output_manager.write(f"Total Cost: {total_input_cost:.6f}$ (in) + {total_output_cost:.6f}$ (out) = {total_input_cost + total_output_cost:.6f}$")
+    output_manager.write(f"Total Cost: {total_input_cost:.4f}$ (in) + {total_output_cost:.4f}$ (out) = {total_input_cost + total_output_cost:.4f}$")
     output_manager.write(f"Calls: {total_calls}")
     
 
