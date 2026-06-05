@@ -9,13 +9,13 @@ from log_config.logging_config import logger
 
 # To train onnx models use this notebook : https://colab.research.google.com/drive/1zzKpSnqVkUDD3FyZ-Yxw3grF7L0R1rlk#scrollTo=step4_train
 # An alternative is to use this free API : https://console.picovoice.ai/signup
-WAKE_WORDS = [
-    openwakeword.models['hey_jarvis']["model_path"], 
-    'models/wake_words/heille_la_pute.onnx', 
-    'models/wake_words/oi_mate.onnx',
-    'models/wake_words/hey_babe.onnx',
-    'models/wake_words/jarjar.onnx',
-] 
+WAKE_WORDS = {
+    'hey_jarvis_v0.1': {'model_path': openwakeword.models['hey_jarvis']["model_path"], 'threshold': 0.4},
+    'heille_la_pute': {'model_path': 'models/wake_words/heille_la_pute.onnx', 'threshold': 0.0025},
+    'oi_mate': {'model_path': 'models/wake_words/oi_mate.onnx', 'threshold': 0.0010},
+    'hey_babe': {'model_path': 'models/wake_words/hey_babe.onnx', 'threshold': 0.0025},
+    'jarjar': {'model_path': 'models/wake_words/jarjar.onnx', 'threshold': 0.0025},
+}
 CHANNELS = 1
 RATE = 16000
 CHUNK = 1280  # openWakeWord prefers 1280 sample chunks (80ms)
@@ -46,13 +46,13 @@ def _get_input_device_index(p):
 
 def get_wake_word():
     with ignore_alsa_warnings():
-        oww_model = Model(wakeword_model_paths=WAKE_WORDS)
+        oww_model = Model(wakeword_model_paths=[w['model_path'] for w in WAKE_WORDS.values()])
         pa = pyaudio.PyAudio()
 
     stream = pa.open(format=pyaudio.paInt16, channels=CHANNELS, rate=RATE,
                     input=True, frames_per_buffer=CHUNK, input_device_index=_get_input_device_index(pa))
 
-    logger.info(f"System Online. Monitoring for: {[os.path.basename(path)[0:-5] for path in WAKE_WORDS]}")
+    logger.info(f"System Online. Monitoring for: {', '.join(WAKE_WORDS.keys())}")
 
     try:
         while True:
@@ -60,10 +60,11 @@ def get_wake_word():
             audio_numpy = np.frombuffer(data, dtype=np.int16)
 
             prediction = oww_model.predict(audio_numpy)
+            print(prediction['oi_mate'], end='\r')  # Print the score for one wake word for monitoring
             wake_word = max(prediction.items(), key=lambda x: x[1])[0]
 
-            if prediction[wake_word] > 0.5:
-                logger.info(f"\nTrigger Detected: {wake_word} (Score: {prediction[wake_word]:.2f})")
+            if prediction[wake_word] > WAKE_WORDS[wake_word]['threshold']:
+                logger.info(f"\nTrigger Detected: {wake_word} (Score: {prediction[wake_word]:.6f})")
                 return wake_word
                     
     except KeyboardInterrupt:

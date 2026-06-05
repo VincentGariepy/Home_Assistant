@@ -120,8 +120,13 @@ class EndSession(Exception):
     """Custom exception to trigger shutdown"""
     pass
 
+from typing import AsyncGenerator, Any, Dict, IO
+
 @asynccontextmanager
-async def _live_main_agent_setup(tone: Literal["neutral", "sassy", "scottish", "jarjar"] = "neutral", response_mode: Literal["TEXT", "AUDIO"] = "TEXT"):
+async def _live_main_agent_setup(
+    tone: Literal["neutral", "sassy", "scottish", "jarjar"] = "neutral",
+    response_mode: Literal["TEXT", "AUDIO"] = "TEXT"
+) -> AsyncGenerator[tuple[Any, str], None]:
     with open('agents/agents_config.yaml', 'r') as file:
         live_agent_config = yaml.safe_load(file)['live_agent']
 
@@ -152,17 +157,75 @@ async def _live_main_agent_setup(tone: Literal["neutral", "sassy", "scottish", "
     async with client.aio.live.connect(model=model, config=config) as session:
         yield session, model
 
-async def receive_responses(session, output_stream, shared_state, tone, model_name):
+async def _handle_tool_call(
+    tool_call: Any,  # likely a Gemini tool call object
+    session: Any,    # Gemini session object
+    end_session: Dict[str, Any]
+) -> None:
+    """Handle tool calls asynchronously without blocking response stream"""
+    await asyncio.sleep(0.5)
+    print('')
+    function_responses = []
+    
+    for function_call in tool_call.function_calls:
+        if function_call.name == "end_chat_tool":
+            logger.info("End chat tool called. Ending session.")
+            end_session['end_session'] = True
+            function_responses.append(
+                types.FunctionResponse(
+                    name="end_chat_tool",
+                    id=function_call.id, 
+                    response={"result": "Chat ended."}
+                )
+            )
+            
+        agent = AGENT_TOOLS_MAP.get(function_call.name)
+        
+        if agent:
+            tool_input = function_call.args.get("input")
+            loop = asyncio.get_event_loop()
+            try:
+                result = await loop.run_in_executor(None, lambda: agent.invoke(input=[HumanMessage(content=tool_input)]))
+            except Exception as e:
+                logger.error(f"Error invoking agent for tool {function_call.name}: {e}")
+                result = f"Error executing tool: {e}"
+                
+            function_responses.append(
+                types.FunctionResponse(
+                    name=function_call.name,
+                    id=function_call.id,
+                    response={"result": str(result[-1].content[-1]['text'])}
+                )
+            )
+
+    await session.send_tool_response(function_responses=function_responses)
+
+async def receive_responses(
+    session: Any,
+    output_stream: Any,  # likely a file-like object
+    shared_state: Dict[str, Any],
+    tone: str,
+    model_name: str
+) -> None:
     text_input = ""
     text_output = ""
     input_tokens_text = 0
     input_tokens_audio = 0
     output_tokens_audio = 0
-    thinking_tokens = 0
+    thinking_tokens = 0 
+
+    end_session = {'end_session' : False}
+    #change end session to true, send another prompt to model for it to output something random 
+    # then we will get another response so we can check for end session   
 
     try:
         while True:
             async for response in session.receive():
+                if end_session['end_session']:
+                    logger.info("Ending session as end_session flag is set.")
+                    await session.close()
+                    raise EndSession()
+                
                 if response and response.usage_metadata and response.usage_metadata.prompt_token_count:
                     input_tokens_text += response.usage_metadata.prompt_tokens_details[0].token_count
                     input_tokens_audio += response.usage_metadata.prompt_tokens_details[1].token_count
@@ -172,45 +235,27 @@ async def receive_responses(session, output_stream, shared_state, tone, model_na
 
                 if response and response.server_content and response.server_content.output_transcription:
                     text_output += response.server_content.output_transcription.text
+                    print(response.server_content.output_transcription.text, end='', flush=True)
                 if response and response.server_content and response.server_content.input_transcription:
                     text_input += response.server_content.input_transcription.text
 
-                # Handle tool calls first
-                if response and response.tool_call:
-                    function_responses = []
-                    
-                    for function_call in response.tool_call.function_calls:
-                        if function_call.name == "end_chat_tool":
-                            logger.info("End chat tool called. Ending session.")
-                            await session.close()
-                            raise EndSession()
-                        
-                        agent = AGENT_TOOLS_MAP.get(function_call.name)
-                        
-                        if agent:
-                            tool_input = function_call.args.get("input")
-                            result = agent.invoke(input = [HumanMessage(content=tool_input)])
-                            
-                            function_responses.append(
-                                types.FunctionResponse(
-                                    name=function_call.name,
-                                    id=function_call.id,
-                                    response={"result": str(result[-1].content[-1]['text'])}
-                                )
-                            )
-
-                    # 5. Send results back so Gemini can continue speaking
-                    await session.send_tool_response(function_responses=function_responses)
-                
                 # Then handle the generated response (text or audio)
                 if response and response.server_content and response.server_content.model_turn:
+                    generating = True
                     for part in response.server_content.model_turn.parts:
                         if part.inline_data:
                             output_stream.write(part.inline_data.data)
                 
+                if response and response.server_content and response.server_content is None and generating:
+                    generating = False                    
+
+                # Handle tool calls first (non-blocking)
+                if response and response.tool_call:
+                    asyncio.create_task(_handle_tool_call(response.tool_call, session, end_session))                  
+                
                 # Print completion info when turn is complete
                 if response and response.server_content and response.server_content.turn_complete:
-                    print("Turn complete.")
+                    print("\nTurn complete.")
                     print(f"Agent text response : {text_output}")
 
                     _conversation_logger.log_conversation(text_input, text_output, None, tone) 
@@ -224,7 +269,10 @@ async def receive_responses(session, output_stream, shared_state, tone, model_na
         # Handle session closure (ConnectionClosedOK or other websocket errors)
         logger.debug(f"receive_responses ended: {e}")
 
-async def stream_mic(session, input_stream):
+async def stream_mic(
+    session: Any,
+    input_stream: Any  # likely a PyAudio stream
+) -> None:
     print("Microphone active. Talk whenever you're ready.")
     while True: # Keep the mic stream running indefinitely
         try:
@@ -235,12 +283,14 @@ async def stream_mic(session, input_stream):
             await session.send_realtime_input(audio=types.Blob(data=input_byte, mime_type=f"audio/pcm;rate={RATE}")) 
             
             # Tiny sleep to yield control to the event loop
-            await asyncio.sleep(0) 
+            await asyncio.sleep(0.01) 
         except Exception as e:
             print(f"Mic Error: {e}")
             break
 
-async def listen_text(session):
+async def listen_text(
+    session: Any
+) -> None:
     print("Console chat active. Type your message and press Enter.")    
     while True:
         try:
@@ -256,7 +306,11 @@ async def listen_text(session):
             break
     logger.info("Text listener ending due to session inactivity.")
 
-async def limit_time(session, session_time_limit_seconds, shared_state):
+async def limit_time(
+    session: Any,
+    session_time_limit_seconds: int,
+    shared_state: Dict[str, Any]
+) -> None:
     while True:
         await asyncio.sleep(int(session_time_limit_seconds/10))  # Check more frequently than the limit
         exit_time = shared_state['last_ping'] + session_time_limit_seconds
@@ -266,9 +320,11 @@ async def limit_time(session, session_time_limit_seconds, shared_state):
             raise EndSession()
 
 
-async def live_main_agent(tone: Literal["neutral", "sassy", "scottish", "jarjar"] = "neutral", 
-                          response_mode: Literal["TEXT", "AUDIO"] = "TEXT", 
-                          session_time_limit_seconds: int = 300):
+async def live_main_agent(
+    tone: Literal["neutral", "sassy", "scottish", "jarjar"] = "neutral",
+    response_mode: Literal["TEXT", "AUDIO"] = "TEXT",
+    session_time_limit_seconds: int = 300
+) -> None:
     try:
         async with _live_main_agent_setup(tone=tone, response_mode=response_mode) as (session, model_name):
             output_stream, p = setup_audio_stream(FORMAT, CHANNELS, RATE)
@@ -279,7 +335,7 @@ async def live_main_agent(tone: Literal["neutral", "sassy", "scottish", "jarjar"
             input_stream = pa.open(format=pyaudio.paInt16, channels=CHANNELS, rate=RATE,
                             input=True, frames_per_buffer=CHUNK, input_device_index=_get_input_device_index(pa))
             
-            shared_state = {"last_ping": time.time()}
+            shared_state = {"last_ping": time.time(), "end_session": False}
 
             # Send initial greeting and signal end of input
             await session.send_realtime_input(text="Hello !")

@@ -1,4 +1,5 @@
 import datetime
+import os
 import wave
 import pyaudio
 import time
@@ -45,8 +46,8 @@ class Timers():
         for timer in self.timers.values():
             if timer.check_timer():
                 timer_names.append(timer.get_name())
-        for timer_name in timer_names:        
-            self.delete_timer(timer.get_name())
+        for timer_name in timer_names:
+            self.delete_timer(timer_name)
         return timer_names
 
 class Timer():
@@ -73,7 +74,7 @@ class Timer():
         return {'hours': time_remaining.seconds // 3600, 'minutes': (time_remaining.seconds % 3600) // 60, 'seconds': time_remaining.seconds % 60}
     
     def _ring(self):
-        file_path = r"./tools/rooster_alarm.wav"
+        file_path = os.path.join(os.path.dirname(__file__), "rooster_alarm.wav")
         try:
             f = wave.open(file_path, "rb")
             
@@ -87,6 +88,8 @@ class Timer():
                 audio_format = pyaudio.paUInt8
             elif sampwidth == 2:
                 audio_format = pyaudio.paInt16
+            elif sampwidth == 3:
+                audio_format = pyaudio.paInt24
             elif sampwidth == 4:
                 audio_format = pyaudio.paInt32
             else:

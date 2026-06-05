@@ -172,7 +172,7 @@ def _init_online_search_agent():
                                 temperature=online_search_agent_config['llm_config']['temperature'])
 
     search = GoogleSearchAPIWrapper(google_api_key=MAPS_API_KEY, 
-                                    GOOGLE_CSE_ID=GOOGLE_CSE_ID)
+                                    google_cse_id=GOOGLE_CSE_ID)
 
     grounding_tool = GoogleSearchResults(api_wrapper=search)
     

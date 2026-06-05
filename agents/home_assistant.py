@@ -51,6 +51,8 @@ class HomeAssistant():
         try:
             while True:
                 send_monthly_email_report()  # Check if it's time to send the monthly report
+                #wait 2 seconds before listening for wake word again to avoid multiple triggers in a row
+                await asyncio.sleep(2)
                 try:
                     response_mode = "AUDIO" if not self.no_audio else "TEXT"
                     if self.no_audio:
