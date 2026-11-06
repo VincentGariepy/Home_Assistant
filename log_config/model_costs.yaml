@@ -1,0 +1,63 @@
+gemini-3.8-flash:
+  cost_per_million:
+    input: 1.5
+    output: 7.5
+gemini-3.5-flash-lite:
+  cost_per_million:
+    input: 0.3
+    output: 2.5
+    audio_input: 0.3 
+gemini-3.8-live:
+  cost_per_million:
+    input: 0.75
+    output: 4.5
+    audio_input: 3
+    audio_output: 12
+gemini-3.1-pro-preview:
+  cost_per_million:
+    input: 2
+    output: 12
+gemini-3.1-flash-lite-preview:
+  cost_per_million:
+    input: 0.25
+    output: 1.5
+    audio_input: 0.5
+gemini-3.1-flash-live-preview:
+  cost_per_million:
+    input: 0.75
+    output: 4.5
+    audio_input: 3
+    audio_output: 12
+gemini-3.1-flash-image-preview:
+  cost_per_million:
+    input: 0.5
+    output: 3
+gemini-3-flash-preview:
+  cost_per_million:
+    input: 0.5
+    output: 3
+    audio_input: 1
+gemini-3-pro-image-preview:
+  cost_per_million:
+    input: 2
+    output: 12
+gemini-2.5.-pro-preview:
+  cost_per_million:
+    input: 1.25
+    output: 10
+gemini-2.5-flash:
+  cost_per_million:
+    input: 0.3
+    output: 2.5
+    audio_input: 1
+gemini-2.5-flash-lite:
+  cost_per_million:
+    input: 0.1
+    output: 0.4
+    audio_input: 0.3
+gemini-2.5-flash-native-audio-preview-12-2025:
+  cost_per_million:
+    input: 0.5
+    output: 2
+    audio_input: 3
+    audio_output: 12
